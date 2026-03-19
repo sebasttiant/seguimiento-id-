@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.github
+.gitignore
+README.md
+*.md
+.env
+.env.local
+.env.dev
+.env.prod
+.env.*
+.vite
+.DS_Store
+coverage

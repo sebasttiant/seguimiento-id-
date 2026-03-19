@@ -1,0 +1,77 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        VITE_PROJECT_DATA_SOURCE: ${VITE_PROJECT_DATA_SOURCE:-api}
+        VITE_AUTH_MODE: ${VITE_AUTH_MODE:-api}
+        VITE_HTTP_TIMEOUT_MS: ${VITE_HTTP_TIMEOUT_MS:-10000}
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    volumes:
+      - ./ops/nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: always
+
+  backend:
+    env_file:
+      - ${BACKEND_ENV_FILE_PROD:-./backend/.env.prod.example}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      RUN_MIGRATIONS: "1"
+      COLLECTSTATIC: "1"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, urllib.request; host = (os.getenv('HEALTHCHECK_HOST') or os.getenv('ALLOWED_HOSTS', 'localhost').split(',')[0].strip() or 'localhost'); req = urllib.request.Request('http://127.0.0.1:8000/api/health', headers={'Host': host, 'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(req, timeout=3)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    restart: always
+
+  celery_worker:
+    env_file:
+      - ${BACKEND_ENV_FILE_PROD:-./backend/.env.prod.example}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+    restart: always
+
+  celery_beat:
+    env_file:
+      - ${BACKEND_ENV_FILE_PROD:-./backend/.env.prod.example}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+    restart: always
+
+  postgres:
+    env_file:
+      - ${BACKEND_ENV_FILE_PROD:-./backend/.env.prod.example}
+    restart: always
+
+  redis:
+    restart: always

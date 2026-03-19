@@ -1,0 +1,92 @@
+x-backend-common: &backend-common
+  build:
+    context: ./backend
+  environment: &backend-env
+    POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+    POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    REDIS_HOST: ${REDIS_HOST:-redis}
+    REDIS_PORT: ${REDIS_PORT:-6379}
+    HEALTHCHECK_REDIS_REQUIRED: "1"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  backend:
+    <<: *backend-common
+    command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, urllib.request; host = (os.getenv('HEALTHCHECK_HOST') or os.getenv('ALLOWED_HOSTS', 'localhost').split(',')[0].strip() or 'localhost'); req = urllib.request.Request('http://127.0.0.1:8000/api/health', headers={'Host': host, 'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(req, timeout=3)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  celery_worker:
+    <<: *backend-common
+    command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+    environment:
+      <<: *backend-env
+      RUN_MIGRATIONS: "0"
+      COLLECTSTATIC: "0"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A config inspect ping -d \"celery@$${HOSTNAME}\" --timeout=5 | grep -q pong",
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 4
+      start_period: 40s
+
+  celery_beat:
+    <<: *backend-common
+    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
+    environment:
+      <<: *backend-env
+      RUN_MIGRATIONS: "0"
+      COLLECTSTATIC: "0"
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tasktracking}
+      POSTGRES_USER: ${POSTGRES_USER:-tasktracking}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tasktracking}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./ops/backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

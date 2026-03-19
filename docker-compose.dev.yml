@@ -1,0 +1,74 @@
+services:
+  frontend:
+    image: node:24.14.0-alpine
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /workspace
+    command: ["sh", "-c", "npm run dev -- --host 0.0.0.0 --port ${FRONTEND_PORT:-5173}"]
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api}
+      VITE_PROJECT_DATA_SOURCE: ${VITE_PROJECT_DATA_SOURCE:-api}
+      VITE_AUTH_MODE: ${VITE_AUTH_MODE:-api}
+      VITE_HTTP_TIMEOUT_MS: ${VITE_HTTP_TIMEOUT_MS:-10000}
+      NPM_CONFIG_CACHE: /tmp/.npm
+    volumes:
+      - ./:/workspace
+    ports:
+      - "${FRONTEND_PORT:-5173}:${FRONTEND_PORT:-5173}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:${FRONTEND_PORT:-5173}"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    volumes:
+      - ./ops/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    env_file:
+      - ${BACKEND_ENV_FILE_DEV:-./backend/.env.dev.example}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      RUN_MIGRATIONS: "1"
+      COLLECTSTATIC: "1"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  celery_worker:
+    env_file:
+      - ${BACKEND_ENV_FILE_DEV:-./backend/.env.dev.example}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+
+  celery_beat:
+    env_file:
+      - ${BACKEND_ENV_FILE_DEV:-./backend/.env.dev.example}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+
+  postgres:
+    env_file:
+      - ${BACKEND_ENV_FILE_DEV:-./backend/.env.dev.example}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
