@@ -44,9 +44,7 @@ export default function LoginPage() {
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
           <h2 className="text-lg font-semibold text-slate-900">Iniciar sesión</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Usa tu usuario (admin, editor o viewer) y contraseña.
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Usa tu usuario (admin, editor o viewer) y contrasena.</p>
 
           <form
             className="mt-5 space-y-4"
@@ -70,7 +68,7 @@ export default function LoginPage() {
             }}
           >
             <div>
-              <Label htmlFor="identifier">Usuario o correo</Label>
+              <Label htmlFor="identifier">Usuario</Label>
               <Input
                 id="identifier"
                 value={identifier}

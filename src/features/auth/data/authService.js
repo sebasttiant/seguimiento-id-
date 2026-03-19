@@ -13,8 +13,7 @@ function normalizeIdentifier(value) {
 function toSessionUser(user) {
   return {
     id: user.id,
-    name: user.name,
-    email: user.email,
+    username: user.username,
     role: user.role,
   };
 }
@@ -27,8 +26,7 @@ export function hasRequiredRole(currentRole, allowedRoles) {
 function toApiSessionUser(user) {
   return {
     id: user?.id,
-    name: `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || user?.email || "Usuario",
-    email: user?.email || "",
+    username: user?.username || "",
     role: user?.role || "viewer",
   };
 }
@@ -55,7 +53,7 @@ function toLoginErrorMessage(error) {
       return "Tu sesión expiró. Inicia sesión nuevamente.";
     }
 
-    return "Credenciales invalidas. Revisa tu usuario/correo y contrasena.";
+    return "Credenciales invalidas. Revisa tu usuario y contrasena.";
   }
 
   if (status === 400 && code === "invalid_host") {
@@ -115,7 +113,7 @@ export function createAuthService({ storage, users = MOCK_USERS, mode = appEnv.a
       const normalizedPassword = String(password || "").trim();
 
       if (!normalizedIdentifier || !normalizedPassword) {
-        throw new Error("Debes ingresar usuario o correo, y contraseña.");
+        throw new Error("Debes ingresar usuario y contrasena.");
       }
 
       if (mode === "api") {
@@ -151,7 +149,7 @@ export function createAuthService({ storage, users = MOCK_USERS, mode = appEnv.a
       });
 
       if (!matchedUser) {
-        throw new Error("Credenciales inválidas. Revisa usuario/correo y contraseña.");
+        throw new Error("Credenciales invalidas. Revisa usuario y contrasena.");
       }
 
       if (role && matchedUser.role !== role) {

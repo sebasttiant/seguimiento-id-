@@ -27,8 +27,7 @@ describe("SessionPanel", () => {
   it("renders neutral session text without exposing name or email", () => {
     authState.currentUser = {
       id: "u-admin",
-      name: "Persona Visible",
-      email: "persona@crm.local",
+      username: "admin",
       role: "admin",
     };
 
@@ -36,6 +35,6 @@ describe("SessionPanel", () => {
 
     expect(html).toContain("Sesión activa");
     expect(html).not.toContain("Persona Visible");
-    expect(html).not.toContain("persona@crm.local");
+    expect(html).not.toContain("persona@internal.invalid");
   });
 });

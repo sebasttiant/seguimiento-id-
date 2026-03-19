@@ -20,16 +20,12 @@ function createStorageMock() {
 const users = [
   {
     id: "u-admin",
-    name: "Admin",
-    email: "admin@crm.local",
     username: "admin",
     role: "admin",
     password: "Admin123!",
   },
   {
     id: "u-viewer",
-    name: "Viewer",
-    email: "viewer@crm.local",
     username: "viewer",
     role: "viewer",
     password: "Viewer123!",
@@ -53,7 +49,7 @@ describe("authService", () => {
     const service = createAuthService({ storage, users, mode: "mock" });
 
     await expect(service.login({ identifier: "admin", password: "BAD" })).rejects.toThrow(
-      "Credenciales inválidas"
+      "Credenciales invalidas"
     );
   });
 
@@ -78,7 +74,7 @@ describe("authService", () => {
     const service = createAuthService({ storage, mode: "api", client });
 
     await expect(service.login({ identifier: "admin", password: "BAD" })).rejects.toThrow(
-      "Credenciales invalidas. Revisa tu usuario/correo y contrasena."
+      "Credenciales invalidas. Revisa tu usuario y contrasena."
     );
   });
 
@@ -107,7 +103,7 @@ describe("authService", () => {
     storage.setItem(
       AUTH_STORAGE_KEY,
       JSON.stringify({
-        user: { id: "u-admin", role: "admin" },
+        user: { id: "u-admin", username: "admin", role: "admin" },
         tokens: { access: "stale-access", refresh: "stale-refresh" },
         source: "api",
       })

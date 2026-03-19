@@ -26,7 +26,7 @@ describe("httpClient auth request interceptor", () => {
     window.sessionStorage.setItem(
       AUTH_STORAGE_KEY,
       JSON.stringify({
-        user: { id: "u-admin", role: "admin" },
+        user: { id: "u-admin", username: "admin", role: "admin" },
         tokens: { access: "valid-token", refresh: "refresh-token" },
         source: "api",
       })

@@ -15,7 +15,7 @@ export function loadAuthSession(storage) {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
-    if (!parsed?.user?.id || !parsed?.user?.role) {
+    if (!parsed?.user?.id || !parsed?.user?.username || !parsed?.user?.role) {
       safeStorage.removeItem(AUTH_STORAGE_KEY);
       return null;
     }

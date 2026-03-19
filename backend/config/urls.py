@@ -14,3 +14,5 @@ urlpatterns = [
     path("api/auth/logout", LogoutView.as_view(), name="auth-logout"),
     path("api/", include("apps.tracking.urls")),
 ]
+
+handler400 = "config.error_handlers.bad_request"

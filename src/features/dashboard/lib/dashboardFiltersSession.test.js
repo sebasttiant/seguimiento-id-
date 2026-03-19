@@ -40,7 +40,7 @@ describe("dashboardFiltersSession", () => {
   });
 
   it("does not include email in storage key", () => {
-    const user = { id: "abc-123", role: "admin", email: "admin@crm.local" };
+    const user = { id: "abc-123", username: "admin", role: "admin" };
     expect(buildDashboardFiltersStorageKey(user)).toBe("crm_dashboard_filters_v1:admin:abc-123");
   });
 });

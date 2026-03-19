@@ -16,17 +16,17 @@ User = get_user_model()
 class TrackingPermissionsTests(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_user(
-            email="admin@crm.local",
+            email="admin.tests@internal.invalid",
             password="Admin123!",
             role="admin",
         )
         self.editor = User.objects.create_user(
-            email="editor@crm.local",
+            email="editor.tests@internal.invalid",
             password="Editor123!",
             role="editor",
         )
         self.viewer = User.objects.create_user(
-            email="viewer@crm.local",
+            email="viewer.tests@internal.invalid",
             password="Viewer123!",
             role="viewer",
         )
@@ -71,17 +71,17 @@ class TrackingPermissionsTests(APITestCase):
 class TrackingAdvancedModulesTests(APITestCase):
     def setUp(self):
         self.admin = User.objects.create_user(
-            email="admin2@crm.local",
+            email="admin2.tests@internal.invalid",
             password="Admin123!",
             role="admin",
         )
         self.editor = User.objects.create_user(
-            email="editor2@crm.local",
+            email="editor2.tests@internal.invalid",
             password="Editor123!",
             role="editor",
         )
         self.viewer = User.objects.create_user(
-            email="viewer2@crm.local",
+            email="viewer2.tests@internal.invalid",
             password="Viewer123!",
             role="viewer",
         )
@@ -166,7 +166,7 @@ class TrackingAdvancedModulesTests(APITestCase):
 class TrackingConsecutiveApiTests(APITestCase):
     def setUp(self):
         self.editor = User.objects.create_user(
-            email="editor-consecutive@crm.local",
+            email="editor-consecutive.tests@internal.invalid",
             password="Editor123!",
             role="editor",
         )
@@ -185,7 +185,7 @@ class TrackingConsecutiveConcurrencyTests(TransactionTestCase):
 
     def setUp(self):
         self.editor = User.objects.create_user(
-            email="editor-concurrency@crm.local",
+            email="editor-concurrency.tests@internal.invalid",
             password="Editor123!",
             role="editor",
         )

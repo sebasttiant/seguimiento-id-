@@ -8,7 +8,7 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "role"]
+        fields = ["id", "username", "role"]
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -21,7 +21,6 @@ class LoginSerializer(TokenObtainPairSerializer):
     def get_token(cls, user):
         token = super().get_token(user)
         token["role"] = user.role
-        token["email"] = user.email
         token["username"] = user.username
         return token
 
@@ -44,7 +43,7 @@ class LoginSerializer(TokenObtainPairSerializer):
         password = attrs.get("password")
 
         if not identifier or not password:
-            raise serializers.ValidationError("identifier/email and password are required")
+            raise serializers.ValidationError("identifier and password are required")
 
         attrs[self.username_field] = self._resolve_identifier(identifier)
         data = super().validate(attrs)
