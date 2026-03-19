@@ -225,6 +225,40 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("referenceImage", response.data)
 
+    def test_advanced_modules_prebrief_reference_image_with_uploaded_at_is_persisted(self):
+        self.client.force_authenticate(self.editor)
+        payload = {
+            "preBrief": {
+                "validated": True,
+                "referenceImage": {
+                    "id": "img-pre-1",
+                    "name": "prebrief.png",
+                    "mimeType": "image/png",
+                    "size": 67,
+                    "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+                    "uploadedAt": "2026-03-19T12:34:56Z",
+                },
+            }
+        }
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["preBrief"]["referenceImage"]["uploadedAt"],
+            "2026-03-19T12:34:56Z",
+        )
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        self.assertEqual(
+            advanced_data.pre_brief["referenceImage"]["uploadedAt"],
+            "2026-03-19T12:34:56Z",
+        )
+
 
 class TrackingConsecutiveApiTests(APITestCase):
     def setUp(self):

@@ -17,6 +17,12 @@ class ReferenceImageSerializer(serializers.Serializer):
     contentBase64 = serializers.CharField()
     uploadedAt = serializers.DateTimeField(required=False)
 
+    def validate(self, attrs):
+        uploaded_at = attrs.get("uploadedAt")
+        if uploaded_at is not None:
+            attrs["uploadedAt"] = uploaded_at.isoformat().replace("+00:00", "Z")
+        return attrs
+
     def validate_mimeType(self, value):
         if not str(value).startswith("image/"):
             raise serializers.ValidationError("Solo se permiten imagenes.")
