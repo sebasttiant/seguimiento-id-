@@ -33,6 +33,42 @@ function toApiSessionUser(user) {
   };
 }
 
+function isExpiredTokenAuthError(error) {
+  const status = error?.response?.status;
+  const code = error?.response?.data?.code;
+  const detail = String(error?.response?.data?.detail || error?.response?.data?.message || "").toLowerCase();
+
+  if (status !== 401) return false;
+
+  return (
+    code === "token_not_valid" ||
+    (detail.includes("token") && (detail.includes("expired") || detail.includes("not valid") || detail.includes("invalid")))
+  );
+}
+
+function toLoginErrorMessage(error) {
+  const status = error?.response?.status;
+  const code = error?.response?.data?.code;
+
+  if (status === 401) {
+    if (isExpiredTokenAuthError(error)) {
+      return "Tu sesión expiró. Inicia sesión nuevamente.";
+    }
+
+    return "Credenciales invalidas. Revisa tu usuario/correo y contrasena.";
+  }
+
+  if (status === 400 && code === "invalid_host") {
+    return "No se puede iniciar sesion por configuracion del servidor (host no permitido).";
+  }
+
+  if (status === 400) {
+    return toErrorMessage(error, "No fue posible iniciar sesion. Verifica los datos e intenta de nuevo.");
+  }
+
+  return toErrorMessage(error, "No fue posible autenticar contra el backend.");
+}
+
 export function createAuthService({ storage, users = MOCK_USERS, mode = appEnv.authMode, client = httpClient } = {}) {
   function loadSession() {
     return loadAuthSession(storage);
@@ -100,7 +136,11 @@ export function createAuthService({ storage, users = MOCK_USERS, mode = appEnv.a
           });
           return sessionUser;
         } catch (error) {
-          throw new Error(toErrorMessage(error, "No fue posible autenticar contra el backend."));
+          if (isExpiredTokenAuthError(error)) {
+            clearSession();
+          }
+
+          throw new Error(toLoginErrorMessage(error));
         }
       }
 

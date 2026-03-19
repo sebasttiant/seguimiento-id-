@@ -19,6 +19,11 @@ const refreshClient = axios.create({
 });
 
 httpClient.interceptors.request.use((config) => {
+  const isAuthEndpoint = String(config?.url || "").includes("/auth/");
+  if (isAuthEndpoint) {
+    return config;
+  }
+
   const session = loadAuthSession();
   if (!session?.tokens?.access) {
     return config;

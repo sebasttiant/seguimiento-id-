@@ -61,4 +61,74 @@ describe("authService", () => {
     expect(hasRequiredRole("viewer", ["admin", "editor"])).toBe(false);
     expect(hasRequiredRole("admin", ["admin", "editor"])).toBe(true);
   });
+
+  it("login API muestra mensaje amigable para credenciales incorrectas", async () => {
+    const storage = createStorageMock();
+    const client = {
+      post: async () => {
+        throw {
+          response: {
+            status: 401,
+            data: { detail: "No active account found with the given credentials" },
+          },
+        };
+      },
+    };
+
+    const service = createAuthService({ storage, mode: "api", client });
+
+    await expect(service.login({ identifier: "admin", password: "BAD" })).rejects.toThrow(
+      "Credenciales invalidas. Revisa tu usuario/correo y contrasena."
+    );
+  });
+
+  it("login API muestra mensaje claro para host invalido", async () => {
+    const storage = createStorageMock();
+    const client = {
+      post: async () => {
+        throw {
+          response: {
+            status: 400,
+            data: { code: "invalid_host", detail: "Host no permitido por el servidor." },
+          },
+        };
+      },
+    };
+
+    const service = createAuthService({ storage, mode: "api", client });
+
+    await expect(service.login({ identifier: "admin", password: "Admin123!" })).rejects.toThrow(
+      "No se puede iniciar sesion por configuracion del servidor (host no permitido)."
+    );
+  });
+
+  it("login API limpia sesion previa y reporta sesion expirada cuando recibe token invalido", async () => {
+    const storage = createStorageMock();
+    storage.setItem(
+      AUTH_STORAGE_KEY,
+      JSON.stringify({
+        user: { id: "u-admin", role: "admin" },
+        tokens: { access: "stale-access", refresh: "stale-refresh" },
+        source: "api",
+      })
+    );
+
+    const client = {
+      post: async () => {
+        throw {
+          response: {
+            status: 401,
+            data: { code: "token_not_valid", detail: "Given token not valid for any token type" },
+          },
+        };
+      },
+    };
+
+    const service = createAuthService({ storage, mode: "api", client });
+
+    await expect(service.login({ identifier: "admin", password: "Admin123!" })).rejects.toThrow(
+      "Tu sesión expiró. Inicia sesión nuevamente."
+    );
+    expect(storage.getItem(AUTH_STORAGE_KEY)).toBeNull();
+  });
 });
