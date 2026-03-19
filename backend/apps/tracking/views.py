@@ -12,9 +12,11 @@ from .serializers import (
     PreBriefSerializer,
     ProjectSerializer,
     QualityRegSerializer,
+    reference_image_metadata,
     SamplesSerializer,
     TaskSerializer,
     TechSpecsSerializer,
+    without_reference_image_content,
 )
 
 
@@ -53,7 +55,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
         if request.method == "GET":
             serializer = AdvancedModulesSerializer(advanced_data)
-            return Response(serializer.data)
+            return Response(without_reference_image_content(serializer.data))
 
         serializer = AdvancedModulesSerializer(
             advanced_data,
@@ -88,6 +90,45 @@ class ProjectViewSet(viewsets.ModelViewSet):
         advanced_data.updated_by = request.user
         advanced_data.save(update_fields=[field_name, "updated_by", "updated_at"])
         return Response({response_key: getattr(advanced_data, field_name)})
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path=r"advanced-modules/image/(?P<module_name>[^/.]+)",
+    )
+    def advanced_module_image(self, request, pk=None, module_name=None):
+        module_key = str(module_name or "").lower()
+        config = ADVANCED_MODULE_CONFIG.get(module_key)
+        if not config:
+            return Response(
+                {"detail": f"Unsupported module '{module_name}'."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        field_name, _, _ = config
+        if field_name not in {"pre_brief", "client_brief"}:
+            return Response(
+                {"detail": f"Module '{module_name}' does not support reference image."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        project = self.get_object()
+        advanced_data = self._get_advanced_data(project)
+        module_payload = getattr(advanced_data, field_name) or {}
+        image_payload = module_payload.get("referenceImage") if isinstance(module_payload, dict) else None
+
+        if not isinstance(image_payload, dict) or not image_payload.get("contentBase64"):
+            return Response({"detail": "Reference image not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(
+            {
+                "module": module_key,
+                "referenceImage": {
+                    **reference_image_metadata(image_payload),
+                    "contentBase64": image_payload["contentBase64"],
+                },
+            }
+        )
 
 
 class TaskViewSet(viewsets.ModelViewSet):

@@ -200,9 +200,20 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(read_response.status_code, status.HTTP_200_OK)
         self.assertEqual(read_response.data["clientBrief"]["referenceImage"]["id"], "img-1")
         self.assertEqual(read_response.data["clientBrief"]["referenceImage"]["mimeType"], "image/png")
+        self.assertNotIn("contentBase64", read_response.data["clientBrief"]["referenceImage"])
 
         advanced_data = ProjectAdvancedData.objects.get(project=self.project)
         self.assertEqual(advanced_data.client_brief["referenceImage"]["id"], "img-1")
+
+        image_response = self.client.get(
+            f"/api/projects/{self.project.id}/advanced-modules/image/clientbrief/"
+        )
+        self.assertEqual(image_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(image_response.data["referenceImage"]["id"], "img-1")
+        self.assertEqual(
+            image_response.data["referenceImage"]["contentBase64"],
+            payload["referenceImage"]["contentBase64"],
+        )
 
     def test_clientbrief_reference_image_rejects_invalid_mime_type(self):
         self.client.force_authenticate(self.editor)
@@ -257,6 +268,35 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(
             advanced_data.pre_brief["referenceImage"]["uploadedAt"],
             "2026-03-19T12:34:56Z",
+        )
+
+    def test_projects_list_excludes_reference_image_content_base64(self):
+        self.client.force_authenticate(self.editor)
+        payload = {
+            "clientBrief": {
+                "referenceImage": {
+                    "id": "img-list-1",
+                    "name": "listado.png",
+                    "mimeType": "image/png",
+                    "size": 67,
+                    "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+                }
+            }
+        }
+
+        write_response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(write_response.status_code, status.HTTP_200_OK)
+
+        list_response = self.client.get("/api/projects/")
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        project_row = next(item for item in list_response.data if str(item["id"]) == str(self.project.id))
+        self.assertNotIn(
+            "contentBase64",
+            project_row["advanced_modules"]["clientBrief"]["referenceImage"],
         )
 
 

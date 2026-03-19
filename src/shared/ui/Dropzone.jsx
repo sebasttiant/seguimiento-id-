@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Badge } from "./primitives.jsx";
 
 function formatBytes(bytes) {
@@ -10,9 +10,43 @@ function formatBytes(bytes) {
   return `${b.toFixed(i===0?0:1)} ${units[i]}`;
 }
 
-export default function Dropzone({ label, helper, accept, disabled, value = [], onChange, hidePickButton = false }) {
+function decodeBase64ToBlob(base64Value, mimeType) {
+  const sanitized = String(base64Value || "")
+    .replace(/^data:[^;]+;base64,/, "")
+    .replace(/\s+/g, "");
+
+  if (!sanitized) return null;
+
+  const binary = atob(sanitized);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new Blob([bytes], { type: mimeType || "application/octet-stream" });
+}
+
+export default function Dropzone({
+  label,
+  helper,
+  accept,
+  disabled,
+  value = [],
+  onChange,
+  hidePickButton = false,
+  onLoadFileContent,
+}) {
   const inputRef = useRef(null);
+  const generatedUrlsRef = useRef(new Map());
   const [isOver, setIsOver] = useState(false);
+  const [loadingViewIds, setLoadingViewIds] = useState({});
+
+  useEffect(() => {
+    return () => {
+      generatedUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      generatedUrlsRef.current.clear();
+    };
+  }, []);
 
   const addFiles = useCallback(async (files) => {
     const arr = await Promise.all(
@@ -61,9 +95,62 @@ export default function Dropzone({ label, helper, accept, disabled, value = [], 
   }, [addFiles, disabled]);
 
   function remove(id) {
+    const existingUrl = generatedUrlsRef.current.get(id);
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+      generatedUrlsRef.current.delete(id);
+    }
     const next = (value || []).filter((f) => f.id !== id);
     onChange(next);
   }
+
+  const openInNewTab = useCallback((url) => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const handleView = useCallback(
+    async (fileItem) => {
+      if (!fileItem) return;
+
+      const fileId = fileItem.id || fileItem.name;
+      setLoadingViewIds((prev) => ({ ...prev, [fileId]: true }));
+
+      try {
+        if (fileItem.previewUrl) {
+          openInNewTab(fileItem.previewUrl);
+          return;
+        }
+
+        let enrichedFile = fileItem;
+        if (!enrichedFile.contentBase64 && typeof onLoadFileContent === "function") {
+          const loaded = await onLoadFileContent(fileItem);
+          if (loaded?.contentBase64) {
+            enrichedFile = { ...fileItem, ...loaded };
+            onChange((value || []).map((row) => (row.id === fileItem.id ? enrichedFile : row)));
+          }
+        }
+
+        if (!enrichedFile.contentBase64) return;
+
+        const mimeType = enrichedFile.mimeType || enrichedFile.type || "application/octet-stream";
+        const existingUrl = generatedUrlsRef.current.get(fileId);
+        if (existingUrl) {
+          openInNewTab(existingUrl);
+          return;
+        }
+
+        const blob = decodeBase64ToBlob(enrichedFile.contentBase64, mimeType);
+        if (!blob) return;
+
+        const url = URL.createObjectURL(blob);
+        generatedUrlsRef.current.set(fileId, url);
+        openInNewTab(url);
+      } finally {
+        setLoadingViewIds((prev) => ({ ...prev, [fileId]: false }));
+      }
+    },
+    [onChange, onLoadFileContent, openInNewTab, value]
+  );
 
   return (
     <div className="space-y-2">
@@ -104,18 +191,15 @@ export default function Dropzone({ label, helper, accept, disabled, value = [], 
                   <p className="text-xs text-slate-500">{formatBytes(f.size)} · {f.mimeType || f.type || "archivo"}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {(f.contentBase64 && (f.mimeType || f.type || "").startsWith("image/")) || f.previewUrl ? (
-                    <a
-                      href={
-                        f.previewUrl ||
-                        `data:${f.mimeType || f.type || "application/octet-stream"};base64,${f.contentBase64}`
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-slate-700 underline"
+                  {((f.contentBase64 || onLoadFileContent) && (f.mimeType || f.type || "").startsWith("image/")) || f.previewUrl ? (
+                    <button
+                      type="button"
+                      className="text-xs text-slate-700 underline disabled:opacity-60"
+                      disabled={Boolean(loadingViewIds[f.id || f.name])}
+                      onClick={() => void handleView(f)}
                     >
-                      Ver
-                    </a>
+                      {loadingViewIds[f.id || f.name] ? "Cargando..." : "Ver"}
+                    </button>
                   ) : null}
                   <Button type="button" variant="ghost" className="h-9" disabled={disabled} onClick={() => remove(f.id)}>
                     Quitar

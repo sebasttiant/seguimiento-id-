@@ -45,6 +45,13 @@ export const projectApi = {
     return data;
   },
 
+  async getAdvancedModuleImage(id, moduleName) {
+    const { data } = await httpClient.get(
+      `/projects/${encodeURIComponent(id)}/advanced-modules/image/${encodeURIComponent(moduleName)}/`
+    );
+    return data;
+  },
+
   async deleteProject(id) {
     await httpClient.delete(`/projects/${encodeURIComponent(id)}/`);
   },

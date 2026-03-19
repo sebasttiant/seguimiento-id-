@@ -1,4 +1,5 @@
 import base64
+from copy import deepcopy
 
 from django.conf import settings
 from rest_framework import serializers
@@ -7,6 +8,29 @@ from .models import Project, ProjectAdvancedData, Task
 
 
 MAX_REFERENCE_IMAGE_SIZE_BYTES = int(getattr(settings, "REFERENCE_IMAGE_MAX_SIZE_BYTES", 5 * 1024 * 1024))
+
+
+REFERENCE_IMAGE_METADATA_FIELDS = ["id", "name", "mimeType", "size", "uploadedAt"]
+
+
+def reference_image_metadata(image_data):
+    if not isinstance(image_data, dict):
+        return image_data
+    return {key: image_data[key] for key in REFERENCE_IMAGE_METADATA_FIELDS if key in image_data}
+
+
+def without_reference_image_content(modules_payload):
+    payload = deepcopy(modules_payload or {})
+
+    pre_brief = payload.get("preBrief")
+    if isinstance(pre_brief, dict) and pre_brief.get("referenceImage") is not None:
+        pre_brief["referenceImage"] = reference_image_metadata(pre_brief.get("referenceImage"))
+
+    client_brief = payload.get("clientBrief")
+    if isinstance(client_brief, dict) and client_brief.get("referenceImage") is not None:
+        client_brief["referenceImage"] = reference_image_metadata(client_brief.get("referenceImage"))
+
+    return payload
 
 
 class ReferenceImageSerializer(serializers.Serializer):
@@ -211,7 +235,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_advanced_modules(self, obj):
         advanced_data = getattr(obj, "advanced_data", None)
         if advanced_data:
-            return AdvancedModulesSerializer(advanced_data).data
+            return without_reference_image_content(AdvancedModulesSerializer(advanced_data).data)
 
         defaults = ProjectAdvancedData.default_payload()
         return {

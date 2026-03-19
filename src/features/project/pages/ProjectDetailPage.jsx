@@ -16,6 +16,7 @@ import PreBriefModule from '../../modules/preBrief/PreBriefModule.jsx';
 import QualityRegModule from '../../modules/qualityReg/QualityRegModule.jsx';
 import SamplesModule from '../../modules/samples/SamplesModule.jsx';
 import TechSpecsModule from '../../modules/techSpecs/TechSpecsModule.jsx';
+import { projectApi } from '../data/projectApi.js';
 
 import {
   useProject,
@@ -138,6 +139,11 @@ export default function ProjectDetailPage() {
       setFlash({ tone: 'bad', title: 'Error al guardar', detail: toErrorMessage(e) });
       scheduleFlashClear(5000);
     }
+  }
+
+  async function loadReferenceImage(moduleName) {
+    const payload = await projectApi.getAdvancedModuleImage(id, moduleName);
+    return payload?.referenceImage || null;
   }
 
   if (isLoading || error || !project) {
@@ -297,6 +303,7 @@ export default function ProjectDetailPage() {
             <PreBriefModule
               project={project}
               canEdit={canEdit}
+              onLoadReferenceImage={() => loadReferenceImage('clientbrief')}
               onSave={(v) =>
                 runSave('Contacto inicial', () =>
                   updateClient.mutateAsync({
@@ -314,6 +321,7 @@ export default function ProjectDetailPage() {
             <ClientBriefModule
               project={project}
               canEdit={canEdit}
+              onLoadReferenceImage={() => loadReferenceImage('clientbrief')}
               onSave={(v) => runSave('Cliente', () => updateClient.mutateAsync(v))}
             />
           </ReadOnlyBlock>
