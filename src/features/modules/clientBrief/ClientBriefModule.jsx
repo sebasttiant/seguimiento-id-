@@ -74,7 +74,7 @@ export default function ClientBriefModule({ project, canEdit, onSave }) {
       contactPhone: pick(cb.contactPhone, ''),
       category: pick(cb.category, 'COSMETICOS'),
       categoryOther: pick(cb.categoryOther, ''),
-      referenceImages: Array.isArray(cb.referenceImages) ? cb.referenceImages : [],
+      referenceImage: pick(cb.referenceImage, null) || (Array.isArray(cb.referenceImages) ? cb.referenceImages[0] || null : null),
       requirements: Array.isArray(cb.requirements) ? cb.requirements : [],
     };
   }, [project]);
@@ -257,8 +257,8 @@ export default function ClientBriefModule({ project, canEdit, onSave }) {
                   helper='Arrastra la imagen aquí o usa el botón "Adjuntar".'
                   accept='image/*'
                   disabled={disabled}
-                  value={form.referenceImages}
-                  onChange={(files) => setField('referenceImages', files)}
+                  value={form.referenceImage ? [form.referenceImage] : []}
+                  onChange={(files) => setField('referenceImage', files[0] || null)}
                 />
               </div>
             </div>

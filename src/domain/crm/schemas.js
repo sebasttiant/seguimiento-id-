@@ -31,7 +31,7 @@ export const clientBriefSchema = z.object({
     ])
     .default("CAPILAR"),
   categoryOther: z.string().optional(),
-  referenceImages: z.array(z.any()).default([]),
+  referenceImage: z.any().nullable().default(null),
 
   // ✅ Módulo 0 - Pre-Brief (calificación del lead)
   leadStatus: z.enum(["PENDIENTE", "CALIFICADO", "DESCARTADO"]).default("PENDIENTE"),

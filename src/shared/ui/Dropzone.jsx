@@ -14,28 +14,49 @@ export default function Dropzone({ label, helper, accept, disabled, value = [], 
   const inputRef = useRef(null);
   const [isOver, setIsOver] = useState(false);
 
-  const addFiles = useCallback((files) => {
-    const arr = Array.from(files || []).map((f) => ({
-      id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      lastModified: f.lastModified,
-      previewUrl: f.type?.startsWith("image/") ? URL.createObjectURL(f) : null,
-    }));
-    onChange([...(value || []), ...arr]);
+  const addFiles = useCallback(async (files) => {
+    const arr = await Promise.all(
+      Array.from(files || []).map(
+        (file) =>
+          new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = typeof reader.result === "string" ? reader.result : "";
+              const commaIndex = result.indexOf(",");
+              const contentBase64 = commaIndex >= 0 ? result.slice(commaIndex + 1) : "";
+
+              resolve({
+                id:
+                  typeof crypto !== "undefined" && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+                name: file.name,
+                size: file.size,
+                mimeType: file.type || "application/octet-stream",
+                contentBase64,
+                uploadedAt: new Date().toISOString(),
+              });
+            };
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(file);
+          })
+      ),
+    );
+
+    const persistedFiles = arr.filter(Boolean);
+    onChange([...(value || []), ...persistedFiles]);
   }, [onChange, value]);
 
   const onDrop = useCallback((e) => {
     e.preventDefault();
     if (disabled) return;
     setIsOver(false);
-    addFiles(e.dataTransfer.files);
+    void addFiles(e.dataTransfer.files);
   }, [addFiles, disabled]);
 
   const onPick = useCallback((e) => {
     if (disabled) return;
-    addFiles(e.target.files);
+    void addFiles(e.target.files);
     e.target.value = "";
   }, [addFiles, disabled]);
 
@@ -80,11 +101,21 @@ export default function Dropzone({ label, helper, accept, disabled, value = [], 
               <div key={f.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm text-slate-900">{f.name}</p>
-                  <p className="text-xs text-slate-500">{formatBytes(f.size)} · {f.type || "archivo"}</p>
+                  <p className="text-xs text-slate-500">{formatBytes(f.size)} · {f.mimeType || f.type || "archivo"}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {f.previewUrl ? (
-                    <a href={f.previewUrl} target="_blank" rel="noreferrer" className="text-xs text-slate-700 underline">Ver</a>
+                  {(f.contentBase64 && (f.mimeType || f.type || "").startsWith("image/")) || f.previewUrl ? (
+                    <a
+                      href={
+                        f.previewUrl ||
+                        `data:${f.mimeType || f.type || "application/octet-stream"};base64,${f.contentBase64}`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-slate-700 underline"
+                    >
+                      Ver
+                    </a>
                   ) : null}
                   <Button type="button" variant="ghost" className="h-9" disabled={disabled} onClick={() => remove(f.id)}>
                     Quitar

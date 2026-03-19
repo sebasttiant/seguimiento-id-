@@ -70,6 +70,8 @@ export default function ProjectDetailPage() {
   const leadStatus = project?.clientBrief?.leadStatus || 'PENDIENTE';
   const isQualified = leadStatus === 'CALIFICADO';
   const canEditByRole = hasRole(['admin', 'editor']);
+  const isViewerReadOnly = !canEditByRole;
+  const effectiveViewOnly = viewOnly || isViewerReadOnly;
 
   function scheduleFlashClear(timeoutMs) {
     window.clearTimeout(flashTimeoutRef.current);
@@ -97,8 +99,8 @@ export default function ProjectDetailPage() {
   }, [project?.locked]);
 
   useEffect(() => {
-    if (viewOnly) setIsEditMode(false);
-  }, [viewOnly]);
+    if (viewOnly || isViewerReadOnly) setIsEditMode(false);
+  }, [isViewerReadOnly, viewOnly]);
 
   // ✅ Gate0: si NO está calificado, forzar estar en Contacto inicial
   useEffect(() => {
@@ -154,7 +156,7 @@ export default function ProjectDetailPage() {
   const locked = Boolean(project.locked);
   const projectLabel = project.consecutive || project.id;
   const canAdminLock = hasRole(['admin']);
-  const canEdit = canEditByRole && isEditMode && !locked && !viewOnly;
+  const canEdit = canEditByRole && isEditMode && !locked && !effectiveViewOnly;
 
   function ReadOnlyBlock({ children }) {
     return (
@@ -178,7 +180,7 @@ export default function ProjectDetailPage() {
               <h1 className='truncate text-lg font-semibold text-slate-900'>seguimiento-id · Seguimiento I+D</h1>
 
               {locked ? <Badge tone='bad'>Histórico</Badge> : <Badge tone='info'>Editable</Badge>}
-              {viewOnly ? <Badge tone='neutral'>Ver</Badge> : <Badge tone='neutral'>Editar</Badge>}
+              {effectiveViewOnly ? <Badge tone='neutral'>Ver</Badge> : <Badge tone='neutral'>Editar</Badge>}
               {!isQualified ? <Badge tone='warn'>Lead: Pendiente</Badge> : <Badge tone='good'>Lead: Calificado</Badge>}
             </div>
 
@@ -190,7 +192,7 @@ export default function ProjectDetailPage() {
             <EditReadToggle
               isEditMode={isEditMode}
               onToggle={() => setIsEditMode((v) => !v)}
-              locked={locked || viewOnly || !canEditByRole}
+              locked={locked || effectiveViewOnly || !canEditByRole}
             />
             <Button
               type='button'
@@ -264,7 +266,7 @@ export default function ProjectDetailPage() {
                 <>
                   Proyecto en <span className='font-medium'>Histórico</span>: edición bloqueada.
                 </>
-              ) : viewOnly ? (
+              ) : effectiveViewOnly ? (
                 <>
                   Vista en <span className='font-medium'>Ver</span> (solo lectura).
                 </>

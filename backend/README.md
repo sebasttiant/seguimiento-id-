@@ -95,6 +95,11 @@ Credenciales:
 - `editor / Editor123!`
 - `viewer / Viewer123!`
 
+Privacidad demo:
+
+- `POST /api/auth/login` y `GET /api/auth/me` devuelven `user` minimo (`id`, `username`, `role`)
+- `email`, `first_name` y `last_name` se mantienen solo a nivel backend
+
 ## Backup y restore
 
 Scripts en `ops/`:
@@ -135,4 +140,4 @@ curl -s -X POST http://localhost:8080/api/auth/login \
   -d '{"identifier":"admin","password":"Admin123!"}'
 ```
 
-Debe responder `access`, `refresh` y `user`.
+Debe responder `access`, `refresh` y `user` (solo `id`, `username`, `role`).

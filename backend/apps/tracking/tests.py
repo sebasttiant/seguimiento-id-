@@ -55,6 +55,20 @@ class TrackingPermissionsTests(APITestCase):
         list_response = self.client.get("/api/projects/")
         self.assertEqual(list_response.status_code, status.HTTP_200_OK)
 
+    def test_viewer_can_read_project_detail_but_not_edit(self):
+        project = Project.objects.create(name="Project Detail Viewer", created_by=self.admin)
+        self.client.force_authenticate(self.viewer)
+
+        detail_response = self.client.get(f"/api/projects/{project.id}/")
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+
+        update_response = self.client.patch(
+            f"/api/projects/{project.id}/",
+            {"name": "No autorizado"},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_viewer_cannot_write_advanced_modules(self):
         project = Project.objects.create(name="Project 2", created_by=self.admin)
         self.client.force_authenticate(self.viewer)
@@ -161,6 +175,55 @@ class TrackingAdvancedModulesTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("preBrief", response.data)
+
+    def test_clientbrief_reference_image_is_persisted_in_database(self):
+        self.client.force_authenticate(self.editor)
+        payload = {
+            "clientName": "Laboratorio Imagen",
+            "referenceImage": {
+                "id": "img-1",
+                "name": "referencia.png",
+                "mimeType": "image/png",
+                "size": 67,
+                "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+            },
+        }
+
+        write_response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(write_response.status_code, status.HTTP_200_OK)
+
+        read_response = self.client.get(f"/api/projects/{self.project.id}/advanced-modules/")
+        self.assertEqual(read_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(read_response.data["clientBrief"]["referenceImage"]["id"], "img-1")
+        self.assertEqual(read_response.data["clientBrief"]["referenceImage"]["mimeType"], "image/png")
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        self.assertEqual(advanced_data.client_brief["referenceImage"]["id"], "img-1")
+
+    def test_clientbrief_reference_image_rejects_invalid_mime_type(self):
+        self.client.force_authenticate(self.editor)
+        payload = {
+            "referenceImage": {
+                "id": "img-2",
+                "name": "documento.pdf",
+                "mimeType": "application/pdf",
+                "size": 10,
+                "contentBase64": "aGVsbG8=",
+            },
+        }
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("referenceImage", response.data)
 
 
 class TrackingConsecutiveApiTests(APITestCase):

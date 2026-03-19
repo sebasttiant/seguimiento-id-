@@ -30,7 +30,7 @@ class Project(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=160)
     description = models.TextField(blank=True)
-    consecutive = models.CharField(max_length=16, unique=True, null=True, blank=True)
+    consecutive = models.CharField(max_length=16, unique=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

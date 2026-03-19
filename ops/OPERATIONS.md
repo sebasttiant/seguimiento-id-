@@ -92,6 +92,11 @@ Credenciales demo:
 - `editor / Editor123!`
 - `viewer / Viewer123!`
 
+Privacidad demo:
+
+- respuestas de `POST /api/auth/login` y `GET /api/auth/me`: solo `id`, `username`, `role`
+- `email`, `first_name`, `last_name` son internos y no deben mostrarse en UI ni respuestas al cliente
+
 Smoke login JWT:
 
 ```bash

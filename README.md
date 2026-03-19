@@ -106,17 +106,15 @@ cp backend/.env.prod.example backend/.env.prod
 # - .env.prod
 # - backend/.env.prod
 
-# 4) Levantar stack prod
-docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# 4) Desplegar (incluye migrate y health checks)
+./ops/deploy.sh
 
-# 5) Crear usuarios demo iniciales (opcional)
-docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml exec backend python manage.py seed_demo_users
+# 5) Opcional: desplegar sin build o sin seed
+./ops/deploy.sh --no-build
+./ops/deploy.sh --skip-seed
+./ops/deploy.sh --env-file .env.prod
 
-# 6) Verificar health
-curl -fsS http://localhost:${NGINX_PORT:-80}/healthz
-curl -fsS http://localhost:${NGINX_PORT:-80}/api/health
-
-# 7) Smoke end-to-end
+# 6) Smoke end-to-end
 ./ops/smoke_e2e.sh --base-url http://localhost:${NGINX_PORT:-80}
 ```
 
@@ -124,6 +122,7 @@ Notas:
 
 - agrega tu dominio/IP en `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS`
 - usa `SECURE_SSL_REDIRECT=1` solo cuando tengas TLS real en proxy/LB
+- `ops/deploy.sh` crea `.env.prod` y `backend/.env.prod` desde los `.example` si faltan, y te avisa para editar secretos
 
 ## Credenciales demo
 
@@ -138,6 +137,11 @@ Usuarios:
 - `admin` / `Admin123!`
 - `editor` / `Editor123!`
 - `viewer` / `Viewer123!`
+
+Privacidad demo:
+
+- la API/UI de sesion devuelve solo `id`, `username`, `role`
+- `email`, `first_name`, `last_name` quedan como datos internos del backend y no se exponen al cliente
 
 ## Persistencia de datos
 

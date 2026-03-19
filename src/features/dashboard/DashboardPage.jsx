@@ -13,6 +13,7 @@ import RoleRestrictionNotice from "../../shared/ui/RoleRestrictionNotice.jsx";
 import SessionPanel from "../auth/components/SessionPanel.jsx";
 import { useAuth } from "../auth/context/AuthContext.jsx";
 import { loadDashboardFilters, saveDashboardFilters } from "./lib/dashboardFiltersSession.js";
+import { getDashboardActions, getProjectDisplayCode } from "./lib/dashboardActions.js";
 import { useCreateProject, useProjectSummaries } from "../project/data/projectHooks.js";
 
 function statusMeta(code) {
@@ -54,6 +55,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState(initialFilters.statusFilter);
   const [operationStatus, setOperationStatus] = useState(null);
   const canEditProjects = hasRole(["admin", "editor"]);
+  const dashboardActions = getDashboardActions(canEditProjects);
 
   const { data = [], isLoading, error } = useProjectSummaries();
 
@@ -234,7 +236,7 @@ export default function DashboardPage() {
                   return (
                     <article key={r.id} className="rounded-2xl border border-slate-200 p-4">
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-semibold text-slate-900">{safeText(r.consecutive || r.id)}</h3>
+                        <h3 className="font-semibold text-slate-900">{safeText(getProjectDisplayCode(r))}</h3>
                         <Badge tone={meta.tone}>{meta.label}</Badge>
                       </div>
                       <p className="mt-2 text-sm text-slate-700">{safeText(r.clientName)}</p>
@@ -248,7 +250,7 @@ export default function DashboardPage() {
                           type="button"
                           variant="outline"
                           className="h-9 flex-1"
-                          disabled={!canEditProjects}
+                          disabled={!dashboardActions.canView}
                           onClick={() => nav(`/projects/${r.id}?mode=view`)}
                         >
                           Ver
@@ -256,7 +258,8 @@ export default function DashboardPage() {
                         <Button
                           type="button"
                           className="h-9 flex-1"
-                          disabled={!canEditProjects}
+                          disabled={!dashboardActions.canEdit}
+                          title={!dashboardActions.canEdit ? "Sin permisos de edicion" : undefined}
                           onClick={() => nav(`/projects/${r.id}?mode=edit`)}
                         >
                           Editar
@@ -286,7 +289,7 @@ export default function DashboardPage() {
                       const t = typeMeta(r.type);
                       return (
                         <tr key={r.id} className="border-t border-slate-100">
-                          <td className="px-4 py-4 font-semibold text-slate-900">{safeText(r.consecutive || r.id)}</td>
+                          <td className="px-4 py-4 font-semibold text-slate-900">{safeText(getProjectDisplayCode(r))}</td>
                           <td className="px-4 py-4 text-slate-900">{safeText(r.clientName)}</td>
                           <td className="px-4 py-4 text-slate-900">{safeText(r.nit)}</td>
                           <td className="px-4 py-4 text-slate-900">{safeText(r.productName)}</td>
@@ -301,12 +304,17 @@ export default function DashboardPage() {
                               <Button
                                 type="button"
                                 variant="outline"
-                                disabled={!canEditProjects}
+                                disabled={!dashboardActions.canView}
                                 onClick={() => nav(`/projects/${r.id}?mode=view`)}
                               >
                                 Ver
                               </Button>
-                              <Button type="button" disabled={!canEditProjects} onClick={() => nav(`/projects/${r.id}?mode=edit`)}>
+                              <Button
+                                type="button"
+                                disabled={!dashboardActions.canEdit}
+                                title={!dashboardActions.canEdit ? "Sin permisos de edicion" : undefined}
+                                onClick={() => nav(`/projects/${r.id}?mode=edit`)}
+                              >
                                 Editar
                               </Button>
                             </div>

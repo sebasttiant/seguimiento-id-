@@ -17,7 +17,7 @@ export default function App() {
         <Route path='/' element={<Navigate to='/dashboard' replace />} />
         <Route path='/dashboard' element={<DashboardPage />} />
 
-        <Route element={<RequireRole allowedRoles={['admin', 'editor']} />}>
+        <Route element={<RequireRole allowedRoles={['admin', 'editor', 'viewer']} />}>
           <Route path='/projects/:id' element={<ProjectDetailPage />} />
         </Route>
       </Route>

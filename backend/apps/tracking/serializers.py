@@ -1,6 +1,43 @@
+import base64
+
+from django.conf import settings
 from rest_framework import serializers
 
 from .models import Project, ProjectAdvancedData, Task
+
+
+MAX_REFERENCE_IMAGE_SIZE_BYTES = int(getattr(settings, "REFERENCE_IMAGE_MAX_SIZE_BYTES", 5 * 1024 * 1024))
+
+
+class ReferenceImageSerializer(serializers.Serializer):
+    id = serializers.CharField(max_length=120)
+    name = serializers.CharField(max_length=255)
+    mimeType = serializers.CharField(max_length=120)
+    size = serializers.IntegerField(min_value=1)
+    contentBase64 = serializers.CharField()
+    uploadedAt = serializers.DateTimeField(required=False)
+
+    def validate_mimeType(self, value):
+        if not str(value).startswith("image/"):
+            raise serializers.ValidationError("Solo se permiten imagenes.")
+        return value
+
+    def validate_size(self, value):
+        if value > MAX_REFERENCE_IMAGE_SIZE_BYTES:
+            max_mb = MAX_REFERENCE_IMAGE_SIZE_BYTES / (1024 * 1024)
+            raise serializers.ValidationError(f"La imagen no puede superar {max_mb:.1f} MB.")
+        return value
+
+    def validate_contentBase64(self, value):
+        try:
+            decoded = base64.b64decode(value, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise serializers.ValidationError("El contenido base64 es invalido.") from exc
+
+        if len(decoded) > MAX_REFERENCE_IMAGE_SIZE_BYTES:
+            max_mb = MAX_REFERENCE_IMAGE_SIZE_BYTES / (1024 * 1024)
+            raise serializers.ValidationError(f"La imagen no puede superar {max_mb:.1f} MB.")
+        return value
 
 
 class RequirementSerializer(serializers.Serializer):
@@ -19,7 +56,7 @@ class PreBriefSerializer(serializers.Serializer):
     contactEmail = serializers.EmailField(required=False, allow_blank=True, default="")
     contactPhone = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
     category = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
-    referenceImage = serializers.JSONField(required=False, allow_null=True, default=None)
+    referenceImage = ReferenceImageSerializer(required=False, allow_null=True, default=None)
 
 
 class ClientBriefSerializer(serializers.Serializer):
@@ -31,7 +68,7 @@ class ClientBriefSerializer(serializers.Serializer):
     contactEmail = serializers.EmailField(required=False, allow_blank=True, default="")
     contactPhone = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
     category = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
-    referenceImage = serializers.JSONField(required=False, allow_null=True, default=None)
+    referenceImage = ReferenceImageSerializer(required=False, allow_null=True, default=None)
     leadStatus = serializers.ChoiceField(
         choices=["PENDIENTE", "CALIFICADO", "DESCARTADO"],
         required=False,

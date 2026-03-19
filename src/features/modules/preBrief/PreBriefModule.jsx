@@ -37,7 +37,7 @@ export default function PreBriefModule({ project, canEdit, onSave }) {
 
       category: cb.category || 'COSMETICOS',
       categoryOther: cb.categoryOther || '',
-      referenceImages: Array.isArray(cb.referenceImages) ? cb.referenceImages : [],
+      referenceImage: cb.referenceImage || (Array.isArray(cb.referenceImages) ? cb.referenceImages[0] || null : null),
 
       leadTargetDate: cb.leadTargetDate || '',
       leadStatus: cb.leadStatus || 'PENDIENTE',
@@ -205,8 +205,8 @@ export default function PreBriefModule({ project, canEdit, onSave }) {
                 helper='Adjunta la foto del producto que trae el cliente como referencia.'
                 accept='image/*'
                 disabled={disabled}
-                value={form.referenceImages}
-                onChange={(files) => setField('referenceImages', files)}
+                value={form.referenceImage ? [form.referenceImage] : []}
+                onChange={(files) => setField('referenceImage', files[0] || null)}
               />
             </div>
           </div>
