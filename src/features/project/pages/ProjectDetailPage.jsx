@@ -23,6 +23,7 @@ import {
   useSetLocked,
   useUpdateChanges,
   useUpdateClientBrief,
+  useUpdatePreBrief,
   useUpdateQualityReg,
   useUpdateSamples,
   useUpdateTechSpecs,
@@ -57,11 +58,36 @@ export default function ProjectDetailPage() {
   const { data: project, isLoading, error } = useProject(id);
 
   const setLocked = useSetLocked(id);
+  const updatePreBrief = useUpdatePreBrief(id);
   const updateClient = useUpdateClientBrief(id);
   const updateSamples = useUpdateSamples(id);
   const updateSpecs = useUpdateTechSpecs(id);
   const updateQuality = useUpdateQualityReg(id);
   const updateChanges = useUpdateChanges(id);
+
+  async function savePreBrief(form) {
+    const {
+      leadStatus = 'PENDIENTE',
+      leadTargetDate = '',
+      categoryOther: _categoryOther,
+      ...sharedFields
+    } = form;
+
+    await updatePreBrief.mutateAsync(sharedFields);
+    await updateClient.mutateAsync({
+      ...(project.clientBrief || {}),
+      clientName: sharedFields.clientName,
+      nit: sharedFields.nit,
+      productName: sharedFields.productName,
+      brand: sharedFields.brand,
+      contactName: sharedFields.contactName,
+      contactEmail: sharedFields.contactEmail,
+      contactPhone: sharedFields.contactPhone,
+      category: sharedFields.category,
+      leadStatus,
+      leadTargetDate,
+    });
+  }
 
   const activeIndex = useMemo(() => {
     const idx = MODULES.findIndex((m) => m.id === activeId);
@@ -303,15 +329,8 @@ export default function ProjectDetailPage() {
             <PreBriefModule
               project={project}
               canEdit={canEdit}
-              onLoadReferenceImage={() => loadReferenceImage('clientbrief')}
-              onSave={(v) =>
-                runSave('Contacto inicial', () =>
-                  updateClient.mutateAsync({
-                    ...(project.clientBrief || {}),
-                    ...v,
-                  })
-                )
-              }
+              onLoadReferenceImage={() => loadReferenceImage('prebrief')}
+              onSave={(v) => runSave('Contacto inicial', () => savePreBrief(v))}
             />
           </ReadOnlyBlock>
         )}

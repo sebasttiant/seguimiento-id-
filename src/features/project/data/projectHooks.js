@@ -24,6 +24,7 @@ function makeMutation(projectId, updater) {
 }
 
 export const useUpdateClientBrief = (id) => makeMutation(id, projectRepository.updateClientBrief);
+export const useUpdatePreBrief = (id) => makeMutation(id, projectRepository.updatePreBrief);
 export const useUpdateTechSpecs = (id) => makeMutation(id, projectRepository.updateTechSpecs);
 export const useUpdateSamples = (id) => makeMutation(id, projectRepository.updateSamples);
 export const useUpdateQualityReg = (id) => makeMutation(id, projectRepository.updateQualityReg);

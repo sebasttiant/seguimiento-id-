@@ -25,22 +25,27 @@ export default function PreBriefModule({ project, canEdit, onSave, onLoadReferen
   const fieldId = useId();
 
   const initial = useMemo(() => {
-    const cb = project?.clientBrief || {};
+    const preBrief = project?.preBrief || {};
+    const clientBrief = project?.clientBrief || {};
     return {
-      clientName: cb.clientName || '',
-      nit: cb.nit || '',
-      productName: cb.productName || '',
-      brand: cb.brand || '',
-      contactName: cb.contactName || '',
-      contactEmail: cb.contactEmail || '',
-      contactPhone: cb.contactPhone || '',
+      clientName: preBrief.clientName || clientBrief.clientName || '',
+      nit: preBrief.nit || clientBrief.nit || '',
+      productName: preBrief.productName || clientBrief.productName || '',
+      brand: preBrief.brand || clientBrief.brand || '',
+      contactName: preBrief.contactName || clientBrief.contactName || '',
+      contactEmail: preBrief.contactEmail || clientBrief.contactEmail || '',
+      contactPhone: preBrief.contactPhone || clientBrief.contactPhone || '',
 
-      category: cb.category || 'COSMETICOS',
-      categoryOther: cb.categoryOther || '',
-      referenceImage: cb.referenceImage || (Array.isArray(cb.referenceImages) ? cb.referenceImages[0] || null : null),
+      category: preBrief.category || clientBrief.category || 'COSMETICOS',
+      categoryOther: clientBrief.categoryOther || '',
+      referenceImage:
+        preBrief.referenceImage ||
+        (Array.isArray(preBrief.referenceImages) ? preBrief.referenceImages[0] || null : null) ||
+        clientBrief.referenceImage ||
+        (Array.isArray(clientBrief.referenceImages) ? clientBrief.referenceImages[0] || null : null),
 
-      leadTargetDate: cb.leadTargetDate || '',
-      leadStatus: cb.leadStatus || 'PENDIENTE',
+      leadTargetDate: clientBrief.leadTargetDate || '',
+      leadStatus: clientBrief.leadStatus || 'PENDIENTE',
     };
   }, [project]);
 

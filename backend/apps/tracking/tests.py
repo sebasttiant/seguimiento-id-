@@ -215,6 +215,71 @@ class TrackingAdvancedModulesTests(APITestCase):
             payload["referenceImage"]["contentBase64"],
         )
 
+    def test_prebrief_and_clientbrief_reference_images_are_loaded_independently(self):
+        self.client.force_authenticate(self.editor)
+
+        prebrief_payload = {
+            "clientName": "Lead inicial",
+            "referenceImage": {
+                "id": "img-pre-only",
+                "name": "prebrief.png",
+                "mimeType": "image/png",
+                "size": 67,
+                "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+            },
+        }
+        clientbrief_payload = {
+            "clientName": "Cliente formal",
+            "referenceImage": {
+                "id": "img-client-only",
+                "name": "clientbrief.png",
+                "mimeType": "image/png",
+                "size": 67,
+                "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNkYAAAAAIAAeIhvDMAAAAASUVORK5CYII=",
+            },
+        }
+
+        prebrief_response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/prebrief/",
+            prebrief_payload,
+            format="json",
+        )
+        self.assertEqual(prebrief_response.status_code, status.HTTP_200_OK)
+
+        clientbrief_response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            clientbrief_payload,
+            format="json",
+        )
+        self.assertEqual(clientbrief_response.status_code, status.HTTP_200_OK)
+
+        modules_response = self.client.get(f"/api/projects/{self.project.id}/advanced-modules/")
+        self.assertEqual(modules_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(modules_response.data["preBrief"]["referenceImage"]["id"], "img-pre-only")
+        self.assertEqual(modules_response.data["clientBrief"]["referenceImage"]["id"], "img-client-only")
+        self.assertNotIn("contentBase64", modules_response.data["preBrief"]["referenceImage"])
+        self.assertNotIn("contentBase64", modules_response.data["clientBrief"]["referenceImage"])
+
+        prebrief_image_response = self.client.get(
+            f"/api/projects/{self.project.id}/advanced-modules/image/prebrief/"
+        )
+        self.assertEqual(prebrief_image_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(prebrief_image_response.data["referenceImage"]["id"], "img-pre-only")
+        self.assertEqual(
+            prebrief_image_response.data["referenceImage"]["contentBase64"],
+            prebrief_payload["referenceImage"]["contentBase64"],
+        )
+
+        clientbrief_image_response = self.client.get(
+            f"/api/projects/{self.project.id}/advanced-modules/image/clientbrief/"
+        )
+        self.assertEqual(clientbrief_image_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(clientbrief_image_response.data["referenceImage"]["id"], "img-client-only")
+        self.assertEqual(
+            clientbrief_image_response.data["referenceImage"]["contentBase64"],
+            clientbrief_payload["referenceImage"]["contentBase64"],
+        )
+
     def test_clientbrief_reference_image_rejects_invalid_mime_type(self):
         self.client.force_authenticate(self.editor)
         payload = {

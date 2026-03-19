@@ -127,4 +127,50 @@ describe("createApiProjectDataSource", () => {
     expect(projectApiMock.updateAdvancedModules).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem("crm_project_api_shadow_v1")).toBeNull();
   });
+
+  it("keeps prebrief and clientbrief reference images separated after reload", async () => {
+    projectApiMock.getById.mockResolvedValue({
+      id: "project-3",
+      name: "Proyecto Imagenes",
+      description: "",
+      status: "active",
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-02T00:00:00Z",
+    });
+    projectApiMock.getAdvancedModules.mockResolvedValue({
+      preBrief: {
+        clientName: "Lead inicial",
+        referenceImage: {
+          id: "img-pre",
+          name: "prebrief.png",
+          mimeType: "image/png",
+          size: 67,
+        },
+      },
+      clientBrief: {
+        clientName: "Cliente final",
+        referenceImage: {
+          id: "img-client",
+          name: "clientbrief.png",
+          mimeType: "image/png",
+          size: 67,
+        },
+      },
+      techSpecs: {},
+      samples: { items: [] },
+      qualityReg: {},
+      changes: { items: [] },
+    });
+    taskApiMock.listByProject.mockResolvedValue([]);
+
+    const ds = createApiProjectDataSource();
+    const project = await ds.getById("project-3");
+
+    expect(project.preBrief.referenceImage).toEqual(
+      expect.objectContaining({ id: "img-pre", name: "prebrief.png" })
+    );
+    expect(project.clientBrief.referenceImage).toEqual(
+      expect.objectContaining({ id: "img-client", name: "clientbrief.png" })
+    );
+  });
 });
