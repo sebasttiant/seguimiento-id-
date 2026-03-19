@@ -123,6 +123,7 @@ function toCoreProject(apiProject, advancedModules) {
 
   return {
     id: String(apiProject?.id || ""),
+    consecutive: String(apiProject?.consecutive || ""),
     name: apiProject?.name || "Proyecto I+D",
     description: apiProject?.description || "",
     status: locked ? "Aprobado" : "En desarrollo",

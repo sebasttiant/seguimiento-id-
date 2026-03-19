@@ -70,6 +70,7 @@ export default function DashboardPage() {
     () =>
       (data || []).map((r) => ({
         id: r.id,
+        consecutive: r.consecutive ?? "",
         clientName: r.clientName ?? r.client ?? r.cliente ?? "",
         nit: r.nit ?? "",
         productName: r.productName ?? r.product ?? r.producto ?? "",
@@ -90,6 +91,7 @@ export default function DashboardPage() {
       .filter((r) => {
         if (!query) return true;
         return (
+          (r.consecutive || "").toLowerCase().includes(query) ||
           (r.id || "").toLowerCase().includes(query) ||
           (r.nit || "").toLowerCase().includes(query) ||
           (r.clientName || "").toLowerCase().includes(query)
@@ -117,12 +119,13 @@ export default function DashboardPage() {
             try {
               setOperationStatus({ tone: "neutral", message: "Creando proyecto..." });
               const p = await createProject.mutateAsync({});
-              setOperationStatus({ tone: "good", message: `Proyecto ${p.id} creado correctamente.` });
+              const projectLabel = p.consecutive || p.id;
+              setOperationStatus({ tone: "good", message: `Proyecto ${projectLabel} creado correctamente.` });
               nav(`/projects/${p.id}?mode=edit`, {
                 state: {
                   flash: {
                     tone: "good",
-                    title: `Proyecto ${p.id} creado`,
+                    title: `Proyecto ${projectLabel} creado`,
                     detail: "Ya puedes completar los modulos del proyecto.",
                   },
                 },
@@ -172,7 +175,7 @@ export default function DashboardPage() {
                   id="dashboard-search"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar por 001-26 / NIT / Cliente…"
+                  placeholder="Buscar por 0001-2026 / NIT / Cliente..."
                   aria-label="Buscar proyecto"
                 />
               </div>
@@ -231,7 +234,7 @@ export default function DashboardPage() {
                   return (
                     <article key={r.id} className="rounded-2xl border border-slate-200 p-4">
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-semibold text-slate-900">{safeText(r.id)}</h3>
+                        <h3 className="font-semibold text-slate-900">{safeText(r.consecutive || r.id)}</h3>
                         <Badge tone={meta.tone}>{meta.label}</Badge>
                       </div>
                       <p className="mt-2 text-sm text-slate-700">{safeText(r.clientName)}</p>
@@ -283,7 +286,7 @@ export default function DashboardPage() {
                       const t = typeMeta(r.type);
                       return (
                         <tr key={r.id} className="border-t border-slate-100">
-                          <td className="px-4 py-4 font-semibold text-slate-900">{safeText(r.id)}</td>
+                          <td className="px-4 py-4 font-semibold text-slate-900">{safeText(r.consecutive || r.id)}</td>
                           <td className="px-4 py-4 text-slate-900">{safeText(r.clientName)}</td>
                           <td className="px-4 py-4 text-slate-900">{safeText(r.nit)}</td>
                           <td className="px-4 py-4 text-slate-900">{safeText(r.productName)}</td>

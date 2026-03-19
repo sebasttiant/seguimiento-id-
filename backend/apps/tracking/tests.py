@@ -1,4 +1,10 @@
+import re
+from concurrent.futures import ThreadPoolExecutor
+
 from django.contrib.auth import get_user_model
+from django.db import close_old_connections, connection, connections
+from django.test import TransactionTestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -155,3 +161,52 @@ class TrackingAdvancedModulesTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("preBrief", response.data)
+
+
+class TrackingConsecutiveApiTests(APITestCase):
+    def setUp(self):
+        self.editor = User.objects.create_user(
+            email="editor-consecutive@crm.local",
+            password="Editor123!",
+            role="editor",
+        )
+        self.client.force_authenticate(self.editor)
+
+    def test_create_project_returns_full_year_consecutive(self):
+        response = self.client.post("/api/projects/", {"name": "Proyecto consecutivo"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertRegex(response.data["consecutive"], r"^\d{4}-\d{4}$")
+        self.assertTrue(response.data["consecutive"].endswith(str(timezone.localdate().year)))
+
+
+class TrackingConsecutiveConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.editor = User.objects.create_user(
+            email="editor-concurrency@crm.local",
+            password="Editor123!",
+            role="editor",
+        )
+
+    def _create_project_and_get_consecutive(self, idx):
+        close_old_connections()
+        try:
+            project = Project.objects.create(name=f"Proyecto {idx}", created_by_id=self.editor.id)
+            return project.consecutive
+        finally:
+            connections.close_all()
+
+    def test_consecutive_is_unique_under_parallel_creations(self):
+        if connection.vendor == "sqlite" and connection.settings_dict.get("NAME") == ":memory:":
+            self.skipTest("SQLite in-memory no comparte estado entre hilos en este escenario")
+
+        total = 8
+        with ThreadPoolExecutor(max_workers=total) as pool:
+            consecutives = list(pool.map(self._create_project_and_get_consecutive, range(total)))
+        close_old_connections()
+
+        self.assertEqual(len(consecutives), total)
+        self.assertEqual(len(set(consecutives)), total)
+        self.assertTrue(all(re.match(r"^\d{4}-\d{4}$", item or "") for item in consecutives))

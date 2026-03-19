@@ -154,6 +154,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         model = Project
         fields = [
             "id",
+            "consecutive",
             "name",
             "description",
             "status",
@@ -162,7 +163,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "consecutive", "created_by", "created_at", "updated_at"]
 
     def get_advanced_modules(self, obj):
         advanced_data = getattr(obj, "advanced_data", None)

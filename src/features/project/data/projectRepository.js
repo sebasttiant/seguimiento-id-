@@ -1,4 +1,4 @@
-import { computeStatusCode, nextConsecutive, normalizeCategory, nowIso } from "../../../domain/project/projectRules.js";
+import { computeStatusCode, normalizeCategory, nowIso } from "../../../domain/project/projectRules.js";
 import { createProjectDataSource } from "./projectDataSourceFactory.js";
 
 const dataSource = createProjectDataSource();
@@ -132,6 +132,11 @@ async function listAllProjects() {
   return (rows || []).map(ensureProject);
 }
 
+async function getProjectById(id) {
+  const found = await dataSource.getById(id);
+  return found ? ensureProject(found) : null;
+}
+
 async function upsertProject(project) {
   const normalized = ensureProject(project);
   return dataSource.update(normalized);
@@ -148,6 +153,7 @@ export const projectRepository = {
       const category = project.clientBrief?.category || project.preBrief?.category || "";
       return {
         id: project.id,
+        consecutive: project.consecutive || "",
         clientName: project.clientBrief?.clientName || project.preBrief?.clientName || project.name || "",
         nit: project.clientBrief?.nit || project.preBrief?.nit || "",
         productName: project.clientBrief?.productName || project.preBrief?.productName || project.description || "",
@@ -160,11 +166,7 @@ export const projectRepository = {
   },
 
   async createProject() {
-    const all = await listAllProjects();
-    const id = nextConsecutive(all);
-
     const project = {
-      id,
       name: "Proyecto I+D",
       status: "En desarrollo",
       locked: false,
@@ -257,48 +259,47 @@ export const projectRepository = {
   },
 
   async getById(id) {
-    const found = await dataSource.getById(id);
-    return found ? ensureProject(found) : null;
+    return getProjectById(id);
   },
 
   async setLocked(id, locked) {
-    const project = await this.getById(id);
+    const project = await getProjectById(id);
     if (!project) return null;
     return upsertProject({ ...project, locked: Boolean(locked), updatedAt: nowIso() });
   },
 
   async updatePreBrief(id, preBrief) {
-    const project = await this.getById(id);
+    const project = await getProjectById(id);
     if (!project) return null;
     return upsertProject({ ...project, preBrief: { ...project.preBrief, ...preBrief }, updatedAt: nowIso() });
   },
 
   async updateClientBrief(id, clientBrief) {
-    const project = await this.getById(id);
+    const project = await getProjectById(id);
     if (!project) return null;
     return upsertProject({ ...project, clientBrief, updatedAt: nowIso() });
   },
 
   async updateTechSpecs(id, techSpecs) {
-    const project = await this.getById(id);
+    const project = await getProjectById(id);
     if (!project) return null;
     return upsertProject({ ...project, techSpecs, updatedAt: nowIso() });
   },
 
   async updateSamples(id, samples) {
-    const project = await this.getById(id);
+    const project = await getProjectById(id);
     if (!project) return null;
     return upsertProject({ ...project, samples: migrateSamples(samples), updatedAt: nowIso() });
   },
 
   async updateQualityReg(id, qualityReg) {
-    const project = await this.getById(id);
+    const project = await getProjectById(id);
     if (!project) return null;
     return upsertProject({ ...project, qualityReg, updatedAt: nowIso() });
   },
 
   async updateChanges(id, changes) {
-    const project = await this.getById(id);
+    const project = await getProjectById(id);
     if (!project) return null;
     return upsertProject({ ...project, changes, updatedAt: nowIso() });
   },

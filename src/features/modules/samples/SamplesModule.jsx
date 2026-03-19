@@ -199,8 +199,7 @@ export default function SamplesModule({ project, canEdit, onSave }) {
   const disabled = !canEdit;
   const pickerRefs = useRef({});
 
-  // 001-26 => 00126
-  const projectBase = useMemo(() => String(project?.id || '').replace(/-/g, ''), [project?.id]);
+  const projectBase = useMemo(() => String(project?.consecutive || project?.id || ''), [project?.consecutive, project?.id]);
   const approvedCode = useMemo(() => (projectBase ? `${projectBase}-A` : ''), [projectBase]);
 
   const initialItems = useMemo(() => {

@@ -84,7 +84,7 @@ export default function ChangesModule({ project }) {
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar por lote (00526-2), origen (00526-1) o descripción..."
+                placeholder="Buscar por lote (0001-2026-2), origen (0001-2026-1) o descripción..."
               />
             </div>
             <div className="text-xs text-slate-500">

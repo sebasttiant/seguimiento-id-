@@ -152,6 +152,7 @@ export default function ProjectDetailPage() {
   }
 
   const locked = Boolean(project.locked);
+  const projectLabel = project.consecutive || project.id;
   const canAdminLock = hasRole(['admin']);
   const canEdit = canEditByRole && isEditMode && !locked && !viewOnly;
 
@@ -181,7 +182,7 @@ export default function ProjectDetailPage() {
               {!isQualified ? <Badge tone='warn'>Lead: Pendiente</Badge> : <Badge tone='good'>Lead: Calificado</Badge>}
             </div>
 
-            <p className='mt-1 text-sm text-slate-500'>Proyecto I+D · Última actualización: {project.updatedAt}</p>
+            <p className='mt-1 text-sm text-slate-500'>Proyecto {projectLabel} · Última actualización: {project.updatedAt}</p>
           </div>
 
           <div className='flex flex-wrap items-center gap-2 md:justify-end'>

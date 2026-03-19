@@ -2,7 +2,24 @@ import uuid
 from copy import deepcopy
 
 from django.conf import settings
-from django.db import models
+from django.db import IntegrityError, models, transaction
+from django.utils import timezone
+
+
+def format_project_consecutive(number: int, year: int) -> str:
+    return f"{number:04d}-{year}"
+
+
+class ProjectConsecutiveCounter(models.Model):
+    year = models.PositiveSmallIntegerField(unique=True)
+    last_value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "project consecutive counter"
+        verbose_name_plural = "project consecutive counters"
+
+    def __str__(self) -> str:
+        return f"{self.year}: {self.last_value}"
 
 
 class Project(models.Model):
@@ -13,6 +30,7 @@ class Project(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=160)
     description = models.TextField(blank=True)
+    consecutive = models.CharField(max_length=16, unique=True, null=True, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -26,6 +44,37 @@ class Project(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    @staticmethod
+    def _reserve_next_consecutive() -> str:
+        year = timezone.localdate().year
+        with transaction.atomic():
+            counter, _ = ProjectConsecutiveCounter.objects.select_for_update().get_or_create(
+                year=year,
+                defaults={"last_value": 0},
+            )
+            counter.last_value += 1
+            next_value = counter.last_value
+            counter.save(update_fields=["last_value"])
+        return format_project_consecutive(next_value, year)
+
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        if not creating or self.consecutive:
+            return super().save(*args, **kwargs)
+
+        last_error = None
+        for _ in range(5):
+            self.consecutive = self._reserve_next_consecutive()
+            try:
+                return super().save(*args, **kwargs)
+            except IntegrityError as exc:
+                last_error = exc
+                self.consecutive = None
+
+        if last_error is not None:
+            raise last_error
+        return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.name
