@@ -106,10 +106,22 @@ function toApiPayload(project) {
   };
 }
 
+function stripMetadataOnlyImage(moduleData) {
+  if (!moduleData || typeof moduleData !== "object") return moduleData;
+  const copy = { ...moduleData };
+  const img = copy.referenceImage;
+  // If referenceImage exists but has no contentBase64, it's metadata-only
+  // from a GET response — don't send it back or backend will reject it.
+  if (img && typeof img === "object" && !img.contentBase64) {
+    delete copy.referenceImage;
+  }
+  return copy;
+}
+
 function toAdvancedModulesPayload(project) {
   return normalizeAdvancedModules({
-    preBrief: project?.preBrief,
-    clientBrief: project?.clientBrief,
+    preBrief: stripMetadataOnlyImage(project?.preBrief),
+    clientBrief: stripMetadataOnlyImage(project?.clientBrief),
     techSpecs: project?.techSpecs,
     samples: project?.samples,
     qualityReg: project?.qualityReg,

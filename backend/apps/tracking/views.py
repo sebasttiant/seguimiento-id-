@@ -48,6 +48,26 @@ class ProjectViewSet(viewsets.ModelViewSet):
         )
         return advanced_data
 
+    @staticmethod
+    def _merge_metadata_only_images(incoming_data, advanced_data):
+        """If incoming referenceImage has no contentBase64, merge with stored one."""
+        result = {**incoming_data}
+        for camel_key, db_field in [("preBrief", "pre_brief"), ("clientBrief", "client_brief")]:
+            module_data = result.get(camel_key)
+            if not isinstance(module_data, dict):
+                continue
+            img = module_data.get("referenceImage")
+            if not isinstance(img, dict) or "contentBase64" in img:
+                continue
+            existing = getattr(advanced_data, db_field) or {}
+            existing_img = existing.get("referenceImage") if isinstance(existing, dict) else None
+            if isinstance(existing_img, dict) and existing_img.get("contentBase64"):
+                result[camel_key] = {
+                    **module_data,
+                    "referenceImage": {**img, "contentBase64": existing_img["contentBase64"]},
+                }
+        return result
+
     @action(detail=True, methods=["get", "patch"], url_path="advanced-modules")
     def advanced_modules(self, request, pk=None):
         project = self.get_object()
@@ -57,9 +77,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
             serializer = AdvancedModulesSerializer(advanced_data)
             return Response(without_reference_image_content(serializer.data))
 
+        incoming_data = request.data
+        if isinstance(incoming_data, dict):
+            incoming_data = self._merge_metadata_only_images(incoming_data, advanced_data)
+
         serializer = AdvancedModulesSerializer(
             advanced_data,
-            data=request.data,
+            data=incoming_data,
             partial=True,
             context={"request": request},
         )
@@ -84,7 +108,23 @@ class ProjectViewSet(viewsets.ModelViewSet):
         if request.method == "GET":
             return Response({response_key: getattr(advanced_data, field_name)})
 
-        serializer = serializer_class(data=request.data, partial=request.method == "PATCH")
+        incoming = request.data
+        # If referenceImage is sent without contentBase64, preserve the existing
+        # contentBase64 from the database (metadata-only round-trip protection).
+        if (
+            isinstance(incoming, dict)
+            and isinstance(incoming.get("referenceImage"), dict)
+            and "contentBase64" not in incoming["referenceImage"]
+        ):
+            existing_module = getattr(advanced_data, field_name) or {}
+            existing_img = existing_module.get("referenceImage") if isinstance(existing_module, dict) else None
+            if isinstance(existing_img, dict) and existing_img.get("contentBase64"):
+                incoming = {
+                    **incoming,
+                    "referenceImage": {**incoming["referenceImage"], "contentBase64": existing_img["contentBase64"]},
+                }
+
+        serializer = serializer_class(data=incoming, partial=request.method == "PATCH")
         serializer.is_valid(raise_exception=True)
         setattr(advanced_data, field_name, serializer.validated_data)
         advanced_data.updated_by = request.user
