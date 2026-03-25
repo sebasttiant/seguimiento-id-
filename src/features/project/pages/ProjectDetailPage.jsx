@@ -172,6 +172,15 @@ export default function ProjectDetailPage() {
     return payload?.referenceImage || null;
   }
 
+  function handlePreviewError(detail) {
+    setFlash({
+      tone: 'bad',
+      title: 'No se pudo abrir la imagen',
+      detail,
+    });
+    scheduleFlashClear(5000);
+  }
+
   if (isLoading || error || !project) {
     return (
       <div className='mx-auto w-full max-w-6xl p-4 md:p-6'>
@@ -192,9 +201,8 @@ export default function ProjectDetailPage() {
 
   function ReadOnlyBlock({ children }) {
     return (
-      <div className='relative'>
-        {!canEdit ? <div className='absolute inset-0 z-10 cursor-not-allowed' title='Vista solo lectura' /> : null}
-        <div className={!canEdit ? 'select-none opacity-95' : ''}>{children}</div>
+      <div className={!canEdit ? 'select-none opacity-95' : ''}>
+        {children}
       </div>
     );
   }
@@ -330,6 +338,7 @@ export default function ProjectDetailPage() {
               project={project}
               canEdit={canEdit}
               onLoadReferenceImage={() => loadReferenceImage('prebrief')}
+              onPreviewError={handlePreviewError}
               onSave={(v) => runSave('Contacto inicial', () => savePreBrief(v))}
             />
           </ReadOnlyBlock>
@@ -341,6 +350,7 @@ export default function ProjectDetailPage() {
               project={project}
               canEdit={canEdit}
               onLoadReferenceImage={() => loadReferenceImage('clientbrief')}
+              onPreviewError={handlePreviewError}
               onSave={(v) => runSave('Cliente', () => updateClient.mutateAsync(v))}
             />
           </ReadOnlyBlock>

@@ -20,7 +20,7 @@ function leadMeta(status) {
   }
 }
 
-export default function PreBriefModule({ project, canEdit, onSave, onLoadReferenceImage }) {
+export default function PreBriefModule({ project, canEdit, onSave, onLoadReferenceImage, onPreviewError }) {
   const disabled = !canEdit;
   const fieldId = useId();
 
@@ -213,6 +213,7 @@ export default function PreBriefModule({ project, canEdit, onSave, onLoadReferen
                 value={form.referenceImage ? [form.referenceImage] : []}
                 onChange={(files) => setField('referenceImage', files[0] || null)}
                 onLoadFileContent={onLoadReferenceImage}
+                onPreviewError={onPreviewError}
               />
             </div>
           </div>

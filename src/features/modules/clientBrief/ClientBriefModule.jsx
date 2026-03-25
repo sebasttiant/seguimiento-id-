@@ -58,7 +58,7 @@ function AccordionRow({ title, subtitle, open, onToggle, right, children }) {
   );
 }
 
-export default function ClientBriefModule({ project, canEdit, onSave, onLoadReferenceImage }) {
+export default function ClientBriefModule({ project, canEdit, onSave, onLoadReferenceImage, onPreviewError }) {
   const disabled = !canEdit;
   const fieldId = useId();
 
@@ -260,6 +260,7 @@ export default function ClientBriefModule({ project, canEdit, onSave, onLoadRefe
                   value={form.referenceImage ? [form.referenceImage] : []}
                   onChange={(files) => setField('referenceImage', files[0] || null)}
                   onLoadFileContent={onLoadReferenceImage}
+                  onPreviewError={onPreviewError}
                 />
               </div>
             </div>

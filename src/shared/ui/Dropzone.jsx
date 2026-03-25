@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Badge } from "./primitives.jsx";
+import {
+  base64ToBlobUrl,
+  canPreviewFile,
+  getPreviewSource,
+  openPreviewWindow,
+} from "./previewUtils.js";
 
 function formatBytes(bytes) {
   if (!bytes && bytes !== 0) return "";
@@ -8,26 +14,6 @@ function formatBytes(bytes) {
   let i = 0;
   while (b >= 1024 && i < units.length-1) { b/=1024; i++; }
   return `${b.toFixed(i===0?0:1)} ${units[i]}`;
-}
-
-function base64ToBlobUrl(base64Value, mimeType) {
-  const cleaned = String(base64Value || "")
-    .replace(/^data:[^;]+;base64,/, "")
-    .replace(/\s+/g, "");
-
-  if (!cleaned) return null;
-
-  try {
-    const binary = atob(cleaned);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: mimeType || "application/octet-stream" });
-    return URL.createObjectURL(blob);
-  } catch {
-    return null;
-  }
 }
 
 export default function Dropzone({
@@ -39,6 +25,7 @@ export default function Dropzone({
   onChange,
   hidePickButton = false,
   onLoadFileContent,
+  onPreviewError,
 }) {
   const inputRef = useRef(null);
   const blobUrlCacheRef = useRef(new Map());
@@ -118,60 +105,107 @@ export default function Dropzone({
     const fileId = fileItem.id || fileItem.name;
     setLoadingIds((prev) => ({ ...prev, [fileId]: true }));
 
+    const notifyError = (message) => {
+      if (typeof onPreviewError === "function") {
+        onPreviewError(message);
+      }
+    };
+
+    const fail = (message, popupWindow) => {
+      if (popupWindow) {
+        try {
+          popupWindow.close?.();
+        } catch {
+          // Ignore close failures.
+        }
+      }
+      notifyError(message);
+    };
+
     try {
-      // 1) If the file already has a previewUrl (freshly picked File object), use it
-      if (fileItem.previewUrl) {
-        window.open(fileItem.previewUrl, "_blank", "noopener,noreferrer");
-        return;
-      }
+      const source = getPreviewSource(fileItem);
 
-      // 2) If we already generated a blob URL for this file, reuse it
-      const cached = blobUrlCacheRef.current.get(fileId);
-      if (cached) {
-        window.open(cached, "_blank", "noopener,noreferrer");
-        return;
-      }
-
-      // 3) If contentBase64 is already in memory, build blob URL from it
-      if (fileItem.contentBase64) {
-        const mime = fileItem.mimeType || fileItem.type || "application/octet-stream";
-        const url = base64ToBlobUrl(fileItem.contentBase64, mime);
-        if (url) {
-          blobUrlCacheRef.current.set(fileId, url);
-          window.open(url, "_blank", "noopener,noreferrer");
+      if (source?.kind === "url") {
+        const popupWindow = openPreviewWindow(source.href);
+        if (!popupWindow) {
+          fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
         }
         return;
       }
 
-      // 4) Lazy load: fetch contentBase64 from backend
+      const cached = blobUrlCacheRef.current.get(fileId);
+      if (cached) {
+        const popupWindow = openPreviewWindow(cached);
+        if (!popupWindow) {
+          fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
+        }
+        return;
+      }
+
+      if (source?.kind === "base64") {
+        const url = base64ToBlobUrl(source.base64, source.mimeType);
+        if (url) {
+          blobUrlCacheRef.current.set(fileId, url);
+          const popupWindow = openPreviewWindow(url);
+          if (!popupWindow) {
+            fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
+          }
+          return;
+        }
+
+        fail("No se pudo preparar la vista previa de la imagen.");
+        return;
+      }
+
       if (typeof onLoadFileContent === "function") {
+        const popupWindow = openPreviewWindow("about:blank");
+        if (!popupWindow) {
+          fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
+          return;
+        }
+
         const loaded = await onLoadFileContent(fileItem);
-        if (loaded?.contentBase64) {
-          // Merge the loaded data into the file item and update parent state
+        if (loaded?.contentBase64 || loaded?.previewUrl || loaded?.fileUrl || loaded?.downloadUrl || loaded?.url) {
           const enriched = { ...fileItem, ...loaded };
           const currentValue = valueRef.current || [];
           onChange(currentValue.map((row) => (row.id === fileItem.id ? enriched : row)));
 
-          const mime = enriched.mimeType || enriched.type || "application/octet-stream";
-          const url = base64ToBlobUrl(enriched.contentBase64, mime);
-          if (url) {
-            blobUrlCacheRef.current.set(fileId, url);
-            window.open(url, "_blank", "noopener,noreferrer");
+          const enrichedSource = getPreviewSource(enriched);
+          if (enrichedSource?.kind === "url") {
+            if (!openPreviewWindow(enrichedSource.href, popupWindow)) {
+              fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.", popupWindow);
+            }
+            return;
           }
+
+          if (enrichedSource?.kind === "base64") {
+            const mime = enrichedSource.mimeType;
+            const url = base64ToBlobUrl(enrichedSource.base64, mime);
+            if (url) {
+              blobUrlCacheRef.current.set(fileId, url);
+              if (!openPreviewWindow(url, popupWindow)) {
+                fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.", popupWindow);
+              }
+              return;
+            }
+          }
+
+          fail("No se pudo preparar la vista previa de la imagen.", popupWindow);
+          return;
         }
+
+        fail("No se pudo cargar la imagen para la vista previa.", popupWindow);
+        return;
       }
+
+      fail("Este archivo no tiene vista previa disponible.");
     } finally {
       setLoadingIds((prev) => ({ ...prev, [fileId]: false }));
     }
   }
 
   const canShowView = (f) => {
-    if (f.previewUrl) return true;
-    const isImage = (f.mimeType || f.type || "").startsWith("image/");
-    if (!isImage) return false;
-    if (f.contentBase64) return true;
-    if (typeof onLoadFileContent === "function") return true;
-    return false;
+    return canPreviewFile(f, onLoadFileContent);
   };
 
   return (
