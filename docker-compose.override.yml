@@ -66,8 +66,6 @@ services:
   postgres:
     env_file:
       - ${BACKEND_ENV_FILE_DEV:-./backend/.env.dev.example}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
 
   redis:
     ports:

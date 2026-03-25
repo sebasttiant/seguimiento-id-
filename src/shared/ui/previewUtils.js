@@ -75,9 +75,44 @@ export function openPreviewWindow(url, popupWindow) {
   if (!nextPopupWindow) return null;
 
   try {
-    nextPopupWindow.document.title = "Vista previa";
-    nextPopupWindow.document.body.innerHTML =
-      '<!doctype html><html><head><title>Vista previa</title></head><body style="font-family:sans-serif;padding:16px">Cargando vista previa...</body></html>';
+    const safeUrl = String(url || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+    nextPopupWindow.document.open();
+    nextPopupWindow.document.write(`<!doctype html>
+<html>
+  <head>
+    <title>Vista previa</title>
+    <style>
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #ffffff;
+        font-family: sans-serif;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      img {
+        max-width: min(100vw - 48px, 1200px);
+        max-height: calc(100vh - 48px);
+        object-fit: contain;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+        border-radius: 16px;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="${safeUrl}" alt="Vista previa" />
+  </body>
+</html>`);
+    nextPopupWindow.document.close();
   } catch {
     // Some browsers restrict touching about:blank before navigation.
   }
