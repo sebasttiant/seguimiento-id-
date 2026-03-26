@@ -301,6 +301,26 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("referenceImage", response.data)
 
+    def test_clientbrief_reference_image_missing_id_returns_400_instead_of_500(self):
+        self.client.force_authenticate(self.editor)
+        payload = {
+            "referenceImage": {
+                "name": "sin-id.png",
+                "mimeType": "image/png",
+                "size": 67,
+                "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+            },
+        }
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("referenceImage", response.data)
+
     def test_advanced_modules_prebrief_reference_image_with_uploaded_at_is_persisted(self):
         self.client.force_authenticate(self.editor)
         payload = {
@@ -363,6 +383,35 @@ class TrackingAdvancedModulesTests(APITestCase):
             "contentBase64",
             project_row["advanced_modules"]["clientBrief"]["referenceImage"],
         )
+
+    def test_patch_advanced_modules_with_legacy_incomplete_reference_image_does_not_500(self):
+        self.client.force_authenticate(self.editor)
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        advanced_data.client_brief = {
+            "clientName": "Cliente legacy",
+            "referenceImage": {
+                "name": "legacy.png",
+                "mimeType": "image/png",
+                "size": 67,
+                "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+            },
+        }
+        advanced_data.save(update_fields=["client_brief", "updated_at"])
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/",
+            {
+                "clientBrief": {
+                    "clientName": "Cliente actualizado",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("referenceImage", response.data["clientBrief"])
+        self.assertIn("id", response.data["clientBrief"]["referenceImage"])
 
 
 class TrackingConsecutiveApiTests(APITestCase):

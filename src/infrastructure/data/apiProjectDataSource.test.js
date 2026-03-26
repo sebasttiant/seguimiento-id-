@@ -173,4 +173,62 @@ describe("createApiProjectDataSource", () => {
       expect.objectContaining({ id: "img-client", name: "clientbrief.png" })
     );
   });
+
+  it("normalizes outgoing referenceImage shape and generates id when missing", async () => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "generated-img-id"),
+    });
+
+    projectApiMock.updateProject.mockResolvedValue({
+      id: "project-4",
+      name: "Proyecto Imagen",
+      description: "desc",
+      status: "active",
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-02T00:00:00Z",
+    });
+    projectApiMock.updateAdvancedModules.mockResolvedValue({
+      preBrief: {},
+      clientBrief: {},
+      techSpecs: {},
+      samples: { items: [] },
+      qualityReg: {},
+      changes: { items: [] },
+    });
+
+    const ds = createApiProjectDataSource();
+    await ds.update({
+      id: "project-4",
+      name: "Proyecto Imagen",
+      description: "desc",
+      locked: false,
+      preBrief: {
+        clientName: "Lead",
+        referenceImage: {
+          name: "legacy.png",
+          mimeType: "image/png",
+          size: 120,
+        },
+      },
+      clientBrief: { clientName: "Cliente" },
+      techSpecs: {},
+      samples: { items: [] },
+      qualityReg: {},
+      changes: { items: [] },
+    });
+
+    expect(projectApiMock.updateAdvancedModules).toHaveBeenCalledWith(
+      "project-4",
+      expect.objectContaining({
+        preBrief: expect.objectContaining({
+          referenceImage: {
+            id: "generated-img-id",
+            name: "legacy.png",
+            mimeType: "image/png",
+            size: 120,
+          },
+        }),
+      })
+    );
+  });
 });

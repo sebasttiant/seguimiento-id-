@@ -24,6 +24,63 @@ function parseJson(raw, fallbackValue) {
   }
 }
 
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function estimateBase64Size(base64) {
+  if (!base64 || typeof base64 !== "string") return 0;
+  const clean = base64.trim();
+  if (!clean) return 0;
+  const padding = clean.endsWith("==") ? 2 : clean.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((clean.length * 3) / 4) - padding);
+}
+
+function createReferenceImageId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `img_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+export function normalizeReferenceImage(referenceImage) {
+  if (!referenceImage || typeof referenceImage !== "object") return null;
+
+  const contentBase64 = firstString(referenceImage.contentBase64);
+  const mimeType = firstString(referenceImage.mimeType, referenceImage.type) || "image/*";
+  const parsedSize = Number(referenceImage.size);
+  const size = Number.isFinite(parsedSize) && parsedSize > 0 ? Math.floor(parsedSize) : estimateBase64Size(contentBase64) || 1;
+  const id = firstString(referenceImage.id) || createReferenceImageId();
+  const name = firstString(referenceImage.name, referenceImage.fileName) || `${id}.png`;
+
+  const normalized = {
+    id,
+    name,
+    mimeType,
+    size,
+  };
+
+  if (contentBase64) {
+    normalized.contentBase64 = contentBase64;
+  }
+
+  if (referenceImage.uploadedAt) {
+    normalized.uploadedAt = referenceImage.uploadedAt;
+  }
+
+  return normalized;
+}
+
+function normalizeModuleReferenceImage(moduleData) {
+  if (!moduleData || typeof moduleData !== "object") return moduleData;
+  const copy = { ...moduleData };
+  copy.referenceImage = normalizeReferenceImage(copy.referenceImage);
+  return copy;
+}
+
 function getDefaultModules() {
   return {
     preBrief: {
@@ -106,22 +163,10 @@ function toApiPayload(project) {
   };
 }
 
-function stripMetadataOnlyImage(moduleData) {
-  if (!moduleData || typeof moduleData !== "object") return moduleData;
-  const copy = { ...moduleData };
-  const img = copy.referenceImage;
-  // If referenceImage exists but has no contentBase64, it's metadata-only
-  // from a GET response — don't send it back or backend will reject it.
-  if (img && typeof img === "object" && !img.contentBase64) {
-    delete copy.referenceImage;
-  }
-  return copy;
-}
-
 function toAdvancedModulesPayload(project) {
   return normalizeAdvancedModules({
-    preBrief: stripMetadataOnlyImage(project?.preBrief),
-    clientBrief: stripMetadataOnlyImage(project?.clientBrief),
+    preBrief: normalizeModuleReferenceImage(project?.preBrief),
+    clientBrief: normalizeModuleReferenceImage(project?.clientBrief),
     techSpecs: project?.techSpecs,
     samples: project?.samples,
     qualityReg: project?.qualityReg,

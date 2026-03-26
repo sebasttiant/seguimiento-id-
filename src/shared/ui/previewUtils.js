@@ -117,6 +117,18 @@ export function openPreviewWindow(url, popupWindow) {
     // Some browsers restrict touching about:blank before navigation.
   }
 
+  // For blob: and data: URLs the document.write() above already rendered the
+  // image correctly. Calling location.replace() on these schemes can cause a
+  // black/broken display in some browsers because the browser replaces the
+  // rendered page with a raw resource navigation that may fail or show nothing.
+  // Only use location.replace() for http/https navigable URLs.
+  const isNavigableUrl = /^https?:/i.test(String(url || ""));
+
+  if (!isNavigableUrl) {
+    nextPopupWindow.focus?.();
+    return nextPopupWindow;
+  }
+
   try {
     nextPopupWindow.location.replace(url);
     nextPopupWindow.focus?.();

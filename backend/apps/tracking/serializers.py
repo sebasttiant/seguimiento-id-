@@ -47,6 +47,37 @@ class ReferenceImageSerializer(serializers.Serializer):
             attrs["uploadedAt"] = uploaded_at.isoformat().replace("+00:00", "Z")
         return attrs
 
+    def to_representation(self, instance):
+        """Render legacy/incomplete image payloads without raising KeyError."""
+        if not isinstance(instance, dict):
+            return super().to_representation(instance)
+
+        size_value = instance.get("size")
+        try:
+            normalized_size = int(size_value)
+        except (TypeError, ValueError):
+            normalized_size = 0
+
+        uploaded_at = instance.get("uploadedAt")
+        if hasattr(uploaded_at, "isoformat"):
+            uploaded_at = uploaded_at.isoformat().replace("+00:00", "Z")
+
+        data = {
+            "id": str(instance.get("id") or ""),
+            "name": str(instance.get("name") or ""),
+            "mimeType": str(instance.get("mimeType") or ""),
+            "size": normalized_size,
+        }
+
+        if uploaded_at:
+            data["uploadedAt"] = uploaded_at
+
+        content_base64 = instance.get("contentBase64")
+        if content_base64:
+            data["contentBase64"] = str(content_base64)
+
+        return data
+
     def validate_mimeType(self, value):
         if not str(value).startswith("image/"):
             raise serializers.ValidationError("Solo se permiten imagenes.")
