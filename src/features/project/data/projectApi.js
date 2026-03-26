@@ -45,9 +45,11 @@ export const projectApi = {
     return data;
   },
 
-  async getAdvancedModuleImage(id, moduleName) {
+  async getAdvancedModuleImage(id, moduleName, imageId) {
+    const params = imageId ? { imageId } : undefined;
     const { data } = await httpClient.get(
-      `/projects/${encodeURIComponent(id)}/advanced-modules/image/${encodeURIComponent(moduleName)}/`
+      `/projects/${encodeURIComponent(id)}/advanced-modules/image/${encodeURIComponent(moduleName)}/`,
+      { params }
     );
     return data;
   },

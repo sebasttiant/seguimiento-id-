@@ -38,6 +38,26 @@ const MODULES = [
   { id: 'changes', label: 'Control de Cambios' },
 ];
 
+const MAX_REFERENCE_IMAGES = 5;
+
+function mergeReferenceImages(...collections) {
+  const merged = [];
+  const seen = new Set();
+
+  for (const collection of collections) {
+    for (const image of collection || []) {
+      if (!image || typeof image !== 'object') continue;
+      const key = String(image.id || '').trim() || `${image.name || 'img'}_${image.uploadedAt || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(image);
+      if (merged.length >= MAX_REFERENCE_IMAGES) return merged;
+    }
+  }
+
+  return merged;
+}
+
 export default function ProjectDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -73,6 +93,23 @@ export default function ProjectDetailPage() {
       ...sharedFields
     } = form;
 
+    const preBriefImages = Array.isArray(sharedFields.referenceImages)
+      ? sharedFields.referenceImages
+      : sharedFields.referenceImage
+      ? [sharedFields.referenceImage]
+      : [];
+
+    const existingClientImages = Array.isArray(project.clientBrief?.referenceImages)
+      ? project.clientBrief.referenceImages
+      : project.clientBrief?.referenceImage
+      ? [project.clientBrief.referenceImage]
+      : [];
+
+    const mergedClientImages =
+      leadStatus === 'CALIFICADO'
+        ? mergeReferenceImages(existingClientImages, preBriefImages)
+        : existingClientImages;
+
     await updatePreBrief.mutateAsync(sharedFields);
     await updateClient.mutateAsync({
       ...(project.clientBrief || {}),
@@ -86,6 +123,8 @@ export default function ProjectDetailPage() {
       category: sharedFields.category,
       leadStatus,
       leadTargetDate,
+      referenceImages: mergedClientImages,
+      referenceImage: mergedClientImages[0] || null,
     });
   }
 
@@ -167,8 +206,8 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function loadReferenceImage(moduleName) {
-    const payload = await projectApi.getAdvancedModuleImage(id, moduleName);
+  async function loadReferenceImage(moduleName, fileItem) {
+    const payload = await projectApi.getAdvancedModuleImage(id, moduleName, fileItem?.id);
     return payload?.referenceImage || null;
   }
 
@@ -337,7 +376,7 @@ export default function ProjectDetailPage() {
             <PreBriefModule
               project={project}
               canEdit={canEdit}
-              onLoadReferenceImage={() => loadReferenceImage('prebrief')}
+              onLoadReferenceImage={(fileItem) => loadReferenceImage('prebrief', fileItem)}
               onPreviewError={handlePreviewError}
               onSave={(v) => runSave('Contacto inicial', () => savePreBrief(v))}
             />
@@ -349,7 +388,7 @@ export default function ProjectDetailPage() {
             <ClientBriefModule
               project={project}
               canEdit={canEdit}
-              onLoadReferenceImage={() => loadReferenceImage('clientbrief')}
+              onLoadReferenceImage={(fileItem) => loadReferenceImage('clientbrief', fileItem)}
               onPreviewError={handlePreviewError}
               onSave={(v) => runSave('Cliente', () => updateClient.mutateAsync(v))}
             />

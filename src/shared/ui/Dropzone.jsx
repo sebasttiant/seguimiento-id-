@@ -26,6 +26,8 @@ export default function Dropzone({
   hidePickButton = false,
   onLoadFileContent,
   onPreviewError,
+  maxFiles,
+  onValidationError,
 }) {
   const popupBlockedMessage = "No se pudo abrir la vista previa. El navegador bloqueó la pestaña emergente y no se pudo usar una alternativa.";
   const inputRef = useRef(null);
@@ -45,8 +47,15 @@ export default function Dropzone({
   }, []);
 
   const addFiles = useCallback(async (files) => {
+    const current = valueRef.current || [];
+    const selected = Array.from(files || []);
+    if (Number.isFinite(maxFiles) && maxFiles > 0 && current.length + selected.length > maxFiles) {
+      onValidationError?.(`Solo puedes cargar hasta ${maxFiles} imágenes de referencia.`);
+      return;
+    }
+
     const arr = await Promise.all(
-      Array.from(files || []).map(
+      selected.map(
         (file) =>
           new Promise((resolve) => {
             const reader = new FileReader();
@@ -74,8 +83,8 @@ export default function Dropzone({
     );
 
     const persistedFiles = arr.filter(Boolean);
-    onChange([...(valueRef.current || []), ...persistedFiles]);
-  }, [onChange]);
+    onChange([...current, ...persistedFiles]);
+  }, [maxFiles, onChange, onValidationError]);
 
   const onDrop = useCallback((e) => {
     e.preventDefault();

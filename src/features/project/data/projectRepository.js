@@ -104,8 +104,13 @@ function ensureProject(project) {
     contactPhone: "",
     category: "",
     referenceImage: null,
+    referenceImages: [],
     ...(project.preBrief || {}),
   };
+  if (!Array.isArray(next.preBrief.referenceImages)) {
+    next.preBrief.referenceImages = next.preBrief.referenceImage ? [next.preBrief.referenceImage] : [];
+  }
+  next.preBrief.referenceImage = next.preBrief.referenceImages[0] || null;
   next.preBrief.category = normalizeCategory(next.preBrief.category);
 
   next.clientBrief = {
@@ -118,9 +123,14 @@ function ensureProject(project) {
     contactPhone: "",
     category: "",
     referenceImage: null,
+    referenceImages: [],
     requirements: [],
     ...(project.clientBrief || {}),
   };
+  if (!Array.isArray(next.clientBrief.referenceImages)) {
+    next.clientBrief.referenceImages = next.clientBrief.referenceImage ? [next.clientBrief.referenceImage] : [];
+  }
+  next.clientBrief.referenceImage = next.clientBrief.referenceImages[0] || null;
   next.clientBrief.category = normalizeCategory(next.clientBrief.category);
 
   next.samples = migrateSamples(project.samples);
@@ -184,6 +194,7 @@ export const projectRepository = {
         contactPhone: "",
         category: "",
         referenceImage: null,
+        referenceImages: [],
       },
       clientBrief: {
         clientName: "",
@@ -195,6 +206,7 @@ export const projectRepository = {
         contactPhone: "",
         category: "",
         referenceImage: null,
+        referenceImages: [],
         requirements: [{ title: "Requerimiento 1", notes: "" }],
       },
       techSpecs: {
@@ -277,7 +289,7 @@ export const projectRepository = {
   async updateClientBrief(id, clientBrief) {
     const project = await getProjectById(id);
     if (!project) return null;
-    return upsertProject({ ...project, clientBrief, updatedAt: nowIso() });
+    return upsertProject({ ...project, clientBrief: { ...project.clientBrief, ...clientBrief }, updatedAt: nowIso() });
   },
 
   async updateTechSpecs(id, techSpecs) {

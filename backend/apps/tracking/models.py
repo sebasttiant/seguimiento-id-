@@ -134,6 +134,7 @@ DEFAULT_PRE_BRIEF = {
     "contactPhone": "",
     "category": "",
     "referenceImage": None,
+    "referenceImages": [],
 }
 
 DEFAULT_CLIENT_BRIEF = {
@@ -146,6 +147,7 @@ DEFAULT_CLIENT_BRIEF = {
     "contactPhone": "",
     "category": "",
     "referenceImage": None,
+    "referenceImages": [],
     "requirements": [],
     "leadStatus": "PENDIENTE",
     "leadBudgetRange": "",

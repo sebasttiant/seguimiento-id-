@@ -17,6 +17,14 @@ const CATEGORY_OPTIONS = [
   { value: 'ALIMENTOS', label: 'Alimentos' },
 ];
 
+const MAX_REFERENCE_IMAGES = 5;
+
+function getReferenceImages(moduleData = {}) {
+  if (Array.isArray(moduleData.referenceImages)) return moduleData.referenceImages;
+  if (moduleData.referenceImage) return [moduleData.referenceImage];
+  return [];
+}
+
 function pick(v, fallback = '') {
   return v === null || v === undefined ? fallback : v;
 }
@@ -74,7 +82,11 @@ export default function ClientBriefModule({ project, canEdit, onSave, onLoadRefe
       contactPhone: pick(cb.contactPhone, ''),
       category: pick(cb.category, 'COSMETICOS'),
       categoryOther: pick(cb.categoryOther, ''),
-      referenceImage: pick(cb.referenceImage, null) || (Array.isArray(cb.referenceImages) ? cb.referenceImages[0] || null : null),
+      referenceImages: getReferenceImages(cb),
+      leadStatus: pick(cb.leadStatus, 'PENDIENTE'),
+      leadBudgetRange: pick(cb.leadBudgetRange, ''),
+      leadTargetDate: pick(cb.leadTargetDate, ''),
+      leadNotes: pick(cb.leadNotes, ''),
       requirements: Array.isArray(cb.requirements) ? cb.requirements : [],
     };
   }, [project]);
@@ -257,8 +269,10 @@ export default function ClientBriefModule({ project, canEdit, onSave, onLoadRefe
                   helper='Arrastra la imagen aquí o usa el botón "Adjuntar".'
                   accept='image/*'
                   disabled={disabled}
-                  value={form.referenceImage ? [form.referenceImage] : []}
-                  onChange={(files) => setField('referenceImage', files[0] || null)}
+                  value={form.referenceImages || []}
+                  maxFiles={MAX_REFERENCE_IMAGES}
+                  onValidationError={onPreviewError}
+                  onChange={(files) => setField('referenceImages', files)}
                   onLoadFileContent={onLoadReferenceImage}
                   onPreviewError={onPreviewError}
                 />
@@ -295,7 +309,7 @@ export default function ClientBriefModule({ project, canEdit, onSave, onLoadRefe
 
                   return (
                     <AccordionRow
-                      key={`${r.title}_${idx}`}
+                      key={`requirement-${idx}`}
                       title={r.title || `Requerimiento ${idx + 1}`}
                       subtitle={subtitle}
                       open={open}

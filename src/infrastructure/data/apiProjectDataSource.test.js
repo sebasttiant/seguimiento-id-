@@ -140,21 +140,25 @@ describe("createApiProjectDataSource", () => {
     projectApiMock.getAdvancedModules.mockResolvedValue({
       preBrief: {
         clientName: "Lead inicial",
-        referenceImage: {
-          id: "img-pre",
-          name: "prebrief.png",
-          mimeType: "image/png",
-          size: 67,
-        },
+        referenceImages: [
+          {
+            id: "img-pre",
+            name: "prebrief.png",
+            mimeType: "image/png",
+            size: 67,
+          },
+        ],
       },
       clientBrief: {
         clientName: "Cliente final",
-        referenceImage: {
-          id: "img-client",
-          name: "clientbrief.png",
-          mimeType: "image/png",
-          size: 67,
-        },
+        referenceImages: [
+          {
+            id: "img-client",
+            name: "clientbrief.png",
+            mimeType: "image/png",
+            size: 67,
+          },
+        ],
       },
       techSpecs: {},
       samples: { items: [] },
@@ -169,9 +173,11 @@ describe("createApiProjectDataSource", () => {
     expect(project.preBrief.referenceImage).toEqual(
       expect.objectContaining({ id: "img-pre", name: "prebrief.png" })
     );
+    expect(project.preBrief.referenceImages).toHaveLength(1);
     expect(project.clientBrief.referenceImage).toEqual(
       expect.objectContaining({ id: "img-client", name: "clientbrief.png" })
     );
+    expect(project.clientBrief.referenceImages).toHaveLength(1);
   });
 
   it("normalizes outgoing referenceImage shape and generates id when missing", async () => {
@@ -204,11 +210,13 @@ describe("createApiProjectDataSource", () => {
       locked: false,
       preBrief: {
         clientName: "Lead",
-        referenceImage: {
-          name: "legacy.png",
-          mimeType: "image/png",
-          size: 120,
-        },
+        referenceImages: [
+          {
+            name: "legacy.png",
+            mimeType: "image/png",
+            size: 120,
+          },
+        ],
       },
       clientBrief: { clientName: "Cliente" },
       techSpecs: {},
@@ -221,12 +229,20 @@ describe("createApiProjectDataSource", () => {
       "project-4",
       expect.objectContaining({
         preBrief: expect.objectContaining({
-          referenceImage: {
+          referenceImage: expect.objectContaining({
             id: "generated-img-id",
             name: "legacy.png",
             mimeType: "image/png",
             size: 120,
-          },
+          }),
+          referenceImages: [
+            expect.objectContaining({
+              id: "generated-img-id",
+              name: "legacy.png",
+              mimeType: "image/png",
+              size: 120,
+            }),
+          ],
         }),
       })
     );

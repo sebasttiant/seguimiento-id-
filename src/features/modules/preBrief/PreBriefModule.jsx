@@ -8,6 +8,14 @@ const CATEGORY_OPTIONS = [
   { value: 'ALIMENTOS', label: 'Alimentos' },
 ];
 
+const MAX_REFERENCE_IMAGES = 5;
+
+function getReferenceImages(moduleData = {}) {
+  if (Array.isArray(moduleData.referenceImages)) return moduleData.referenceImages;
+  if (moduleData.referenceImage) return [moduleData.referenceImage];
+  return [];
+}
+
 function leadMeta(status) {
   switch (status) {
     case 'CALIFICADO':
@@ -38,11 +46,7 @@ export default function PreBriefModule({ project, canEdit, onSave, onLoadReferen
 
       category: preBrief.category || clientBrief.category || 'COSMETICOS',
       categoryOther: clientBrief.categoryOther || '',
-      referenceImage:
-        preBrief.referenceImage ||
-        (Array.isArray(preBrief.referenceImages) ? preBrief.referenceImages[0] || null : null) ||
-        clientBrief.referenceImage ||
-        (Array.isArray(clientBrief.referenceImages) ? clientBrief.referenceImages[0] || null : null),
+      referenceImages: getReferenceImages(preBrief).length > 0 ? getReferenceImages(preBrief) : getReferenceImages(clientBrief),
 
       leadTargetDate: clientBrief.leadTargetDate || '',
       leadStatus: clientBrief.leadStatus || 'PENDIENTE',
@@ -210,8 +214,10 @@ export default function PreBriefModule({ project, canEdit, onSave, onLoadReferen
                 helper='Adjunta la foto del producto que trae el cliente como referencia.'
                 accept='image/*'
                 disabled={disabled}
-                value={form.referenceImage ? [form.referenceImage] : []}
-                onChange={(files) => setField('referenceImage', files[0] || null)}
+                value={form.referenceImages || []}
+                maxFiles={MAX_REFERENCE_IMAGES}
+                onValidationError={onPreviewError}
+                onChange={(files) => setField('referenceImages', files)}
                 onLoadFileContent={onLoadReferenceImage}
                 onPreviewError={onPreviewError}
               />

@@ -3,6 +3,7 @@ import { projectApi, taskApi } from "../../features/project/data/projectApi.js";
 const LEGACY_SHADOW_KEY = "crm_project_api_shadow_v1";
 const LEGACY_PROJECTS_LIST_KEY = "crm-projects";
 const LEGACY_PROJECTS_MAP_KEY = "crm_rnd_projects_v2";
+const MAX_REFERENCE_IMAGES = 5;
 
 function mapBackendStatusToLocked(status) {
   return status === "archived";
@@ -77,7 +78,14 @@ export function normalizeReferenceImage(referenceImage) {
 function normalizeModuleReferenceImage(moduleData) {
   if (!moduleData || typeof moduleData !== "object") return moduleData;
   const copy = { ...moduleData };
-  copy.referenceImage = normalizeReferenceImage(copy.referenceImage);
+  const fromList = Array.isArray(copy.referenceImages)
+    ? copy.referenceImages.map((item) => normalizeReferenceImage(item)).filter(Boolean)
+    : [];
+  const fromSingle = normalizeReferenceImage(copy.referenceImage);
+  const merged = fromList.length > 0 ? fromList : fromSingle ? [fromSingle] : [];
+
+  copy.referenceImages = merged.slice(0, MAX_REFERENCE_IMAGES);
+  copy.referenceImage = copy.referenceImages[0] || null;
   return copy;
 }
 
@@ -95,6 +103,7 @@ function getDefaultModules() {
       contactPhone: "",
       category: "",
       referenceImage: null,
+      referenceImages: [],
     },
     clientBrief: {
       clientName: "",
@@ -106,6 +115,7 @@ function getDefaultModules() {
       contactPhone: "",
       category: "",
       referenceImage: null,
+      referenceImages: [],
       requirements: [],
       leadStatus: "PENDIENTE",
       leadBudgetRange: "",
@@ -121,15 +131,18 @@ function getDefaultModules() {
 
 function normalizeAdvancedModules(input = {}) {
   const defaults = getDefaultModules();
+  const preBrief = normalizeModuleReferenceImage({
+    ...defaults.preBrief,
+    ...(input.preBrief || {}),
+  });
+  const clientBrief = normalizeModuleReferenceImage({
+    ...defaults.clientBrief,
+    ...(input.clientBrief || {}),
+  });
+
   return {
-    preBrief: {
-      ...defaults.preBrief,
-      ...(input.preBrief || {}),
-    },
-    clientBrief: {
-      ...defaults.clientBrief,
-      ...(input.clientBrief || {}),
-    },
+    preBrief,
+    clientBrief,
     techSpecs: {
       ...defaults.techSpecs,
       ...(input.techSpecs || {}),

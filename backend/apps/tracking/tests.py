@@ -101,6 +101,18 @@ class TrackingAdvancedModulesTests(APITestCase):
         )
         self.project = Project.objects.create(name="Project Advanced", created_by=self.admin)
 
+    @staticmethod
+    def _build_image(image_id, content_base64=None):
+        payload = {
+            "id": image_id,
+            "name": f"{image_id}.png",
+            "mimeType": "image/png",
+            "size": 67,
+        }
+        if content_base64:
+            payload["contentBase64"] = content_base64
+        return payload
+
     def test_editor_can_update_all_advanced_modules(self):
         self.client.force_authenticate(self.editor)
         module_payloads = [
@@ -301,7 +313,7 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("referenceImage", response.data)
 
-    def test_clientbrief_reference_image_missing_id_returns_400_instead_of_500(self):
+    def test_clientbrief_reference_image_missing_id_is_auto_generated(self):
         self.client.force_authenticate(self.editor)
         payload = {
             "referenceImage": {
@@ -318,8 +330,39 @@ class TrackingAdvancedModulesTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("referenceImage", response.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        generated_id = response.data["clientBrief"]["referenceImage"]["id"]
+        self.assertRegex(generated_id, r"^img-[a-f0-9]{16}$")
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        self.assertEqual(advanced_data.client_brief["referenceImage"]["id"], generated_id)
+
+    def test_advanced_modules_prebrief_reference_image_blank_id_is_auto_generated(self):
+        self.client.force_authenticate(self.editor)
+        payload = {
+            "preBrief": {
+                "referenceImage": {
+                    "id": "   ",
+                    "name": "prebrief-sin-id.png",
+                    "mimeType": "image/png",
+                    "size": 67,
+                    "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+                }
+            }
+        }
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        generated_id = response.data["preBrief"]["referenceImage"]["id"]
+        self.assertRegex(generated_id, r"^img-[a-f0-9]{16}$")
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        self.assertEqual(advanced_data.pre_brief["referenceImage"]["id"], generated_id)
 
     def test_advanced_modules_prebrief_reference_image_with_uploaded_at_is_persisted(self):
         self.client.force_authenticate(self.editor)
@@ -378,7 +421,8 @@ class TrackingAdvancedModulesTests(APITestCase):
 
         list_response = self.client.get("/api/projects/")
         self.assertEqual(list_response.status_code, status.HTTP_200_OK)
-        project_row = next(item for item in list_response.data if str(item["id"]) == str(self.project.id))
+        rows = list_response.data.get("results", list_response.data)
+        project_row = next(item for item in rows if str(item["id"]) == str(self.project.id))
         self.assertNotIn(
             "contentBase64",
             project_row["advanced_modules"]["clientBrief"]["referenceImage"],
@@ -387,7 +431,10 @@ class TrackingAdvancedModulesTests(APITestCase):
     def test_patch_advanced_modules_with_legacy_incomplete_reference_image_does_not_500(self):
         self.client.force_authenticate(self.editor)
 
-        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        advanced_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=self.project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
         advanced_data.client_brief = {
             "clientName": "Cliente legacy",
             "referenceImage": {
@@ -412,6 +459,95 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("referenceImage", response.data["clientBrief"])
         self.assertIn("id", response.data["clientBrief"]["referenceImage"])
+
+    def test_get_advanced_modules_never_returns_empty_reference_image_id(self):
+        self.client.force_authenticate(self.editor)
+
+        advanced_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=self.project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
+        advanced_data.client_brief = {
+            "clientName": "Cliente legacy",
+            "referenceImage": {
+                "id": "",
+                "name": "legacy.png",
+                "mimeType": "image/png",
+                "size": 67,
+                "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+            },
+        }
+        advanced_data.save(update_fields=["client_brief", "updated_at"])
+
+        response = self.client.get(f"/api/projects/{self.project.id}/advanced-modules/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        generated_id = response.data["clientBrief"]["referenceImage"]["id"]
+        self.assertRegex(generated_id, r"^img-[a-f0-9]{16}$")
+
+    def test_clientbrief_reference_images_allows_up_to_five_and_rejects_more(self):
+        self.client.force_authenticate(self.editor)
+
+        payload = {
+            "referenceImages": [
+                self._build_image(
+                    f"img-{idx}",
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+                )
+                for idx in range(6)
+            ]
+        }
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("referenceImages", response.data)
+
+    def test_clientbrief_reference_images_append_preserves_existing_content(self):
+        self.client.force_authenticate(self.editor)
+
+        first_content = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+        second_content = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNkYAAAAAIAAeIhvDMAAAAASUVORK5CYII="
+
+        first_write = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            {
+                "referenceImages": [self._build_image("img-existing", first_content)],
+            },
+            format="json",
+        )
+        self.assertEqual(first_write.status_code, status.HTTP_200_OK)
+
+        append_response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            {
+                "referenceImages": [
+                    self._build_image("img-existing"),
+                    self._build_image("img-new", second_content),
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(append_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(append_response.data["clientBrief"]["referenceImages"]), 2)
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        saved_images = advanced_data.client_brief.get("referenceImages") or []
+        self.assertEqual(len(saved_images), 2)
+        self.assertEqual(saved_images[0]["id"], "img-existing")
+        self.assertEqual(saved_images[0]["contentBase64"], first_content)
+        self.assertEqual(saved_images[1]["id"], "img-new")
+
+        second_image_response = self.client.get(
+            f"/api/projects/{self.project.id}/advanced-modules/image/clientbrief/?imageId=img-new"
+        )
+        self.assertEqual(second_image_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_image_response.data["referenceImage"]["id"], "img-new")
+        self.assertEqual(second_image_response.data["referenceImage"]["contentBase64"], second_content)
 
 
 class TrackingConsecutiveApiTests(APITestCase):

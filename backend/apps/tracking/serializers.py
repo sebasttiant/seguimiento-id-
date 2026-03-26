@@ -1,4 +1,5 @@
 import base64
+import hashlib
 from copy import deepcopy
 
 from django.conf import settings
@@ -8,33 +9,128 @@ from .models import Project, ProjectAdvancedData, Task
 
 
 MAX_REFERENCE_IMAGE_SIZE_BYTES = int(getattr(settings, "REFERENCE_IMAGE_MAX_SIZE_BYTES", 5 * 1024 * 1024))
+MAX_REFERENCE_IMAGES_COUNT = int(getattr(settings, "REFERENCE_IMAGES_MAX_COUNT", 5))
 
 
 REFERENCE_IMAGE_METADATA_FIELDS = ["id", "name", "mimeType", "size", "uploadedAt"]
 
 
+def _normalized_reference_image_text(value):
+    return str(value or "").strip()
+
+
+def _has_reference_image_payload(image_data):
+    if not isinstance(image_data, dict):
+        return False
+
+    if _normalized_reference_image_text(image_data.get("contentBase64")):
+        return True
+
+    for field in ["name", "mimeType", "uploadedAt"]:
+        if _normalized_reference_image_text(image_data.get(field)):
+            return True
+
+    try:
+        return int(image_data.get("size") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _build_reference_image_id(image_data):
+    payload = {
+        "name": _normalized_reference_image_text(image_data.get("name")),
+        "mimeType": _normalized_reference_image_text(image_data.get("mimeType")),
+        "size": _normalized_reference_image_text(image_data.get("size")),
+        "uploadedAt": _normalized_reference_image_text(image_data.get("uploadedAt")),
+        "contentBase64": _normalized_reference_image_text(image_data.get("contentBase64")),
+    }
+    fingerprint = "|".join(payload.values())
+    digest = hashlib.sha1(fingerprint.encode("utf-8")).hexdigest()[:16]
+    return f"img-{digest}"
+
+
+def ensure_reference_image_id(image_data, fallback_id=""):
+    if not isinstance(image_data, dict):
+        return image_data
+
+    current_id = _normalized_reference_image_text(image_data.get("id"))
+    if current_id:
+        return {**image_data, "id": current_id}
+
+    fallback = _normalized_reference_image_text(fallback_id)
+    if fallback:
+        return {**image_data, "id": fallback}
+
+    if not _has_reference_image_payload(image_data):
+        return image_data
+
+    return {**image_data, "id": _build_reference_image_id(image_data)}
+
+
 def reference_image_metadata(image_data):
     if not isinstance(image_data, dict):
         return image_data
-    return {key: image_data[key] for key in REFERENCE_IMAGE_METADATA_FIELDS if key in image_data}
+    normalized = ensure_reference_image_id(image_data)
+    return {key: normalized[key] for key in REFERENCE_IMAGE_METADATA_FIELDS if key in normalized}
+
+
+def extract_reference_images(module_payload):
+    if not isinstance(module_payload, dict):
+        return []
+
+    source = module_payload.get("referenceImages")
+    if isinstance(source, list):
+        normalized = [ensure_reference_image_id(item) for item in source if isinstance(item, dict)]
+        if normalized:
+            return normalized
+
+    single_image = module_payload.get("referenceImage")
+    if isinstance(single_image, dict):
+        return [ensure_reference_image_id(single_image)]
+
+    return []
+
+
+def with_reference_images(module_payload, images):
+    normalized = [ensure_reference_image_id(item) for item in (images or []) if isinstance(item, dict)]
+    result = {**(module_payload or {})}
+    result["referenceImages"] = normalized
+    result["referenceImage"] = normalized[0] if normalized else None
+    return result
+
+
+def validate_reference_images_count(images):
+    total = len(images or [])
+    if total > MAX_REFERENCE_IMAGES_COUNT:
+        raise serializers.ValidationError(
+            {
+                "referenceImages": [
+                    f"Solo puedes cargar hasta {MAX_REFERENCE_IMAGES_COUNT} imágenes de referencia."
+                ]
+            }
+        )
 
 
 def without_reference_image_content(modules_payload):
     payload = deepcopy(modules_payload or {})
 
     pre_brief = payload.get("preBrief")
-    if isinstance(pre_brief, dict) and pre_brief.get("referenceImage") is not None:
-        pre_brief["referenceImage"] = reference_image_metadata(pre_brief.get("referenceImage"))
+    if isinstance(pre_brief, dict):
+        pre_brief_images = [reference_image_metadata(image) for image in extract_reference_images(pre_brief)]
+        pre_brief["referenceImages"] = pre_brief_images
+        pre_brief["referenceImage"] = pre_brief_images[0] if pre_brief_images else None
 
     client_brief = payload.get("clientBrief")
-    if isinstance(client_brief, dict) and client_brief.get("referenceImage") is not None:
-        client_brief["referenceImage"] = reference_image_metadata(client_brief.get("referenceImage"))
+    if isinstance(client_brief, dict):
+        client_brief_images = [reference_image_metadata(image) for image in extract_reference_images(client_brief)]
+        client_brief["referenceImages"] = client_brief_images
+        client_brief["referenceImage"] = client_brief_images[0] if client_brief_images else None
 
     return payload
 
 
 class ReferenceImageSerializer(serializers.Serializer):
-    id = serializers.CharField(max_length=120)
+    id = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     name = serializers.CharField(max_length=255)
     mimeType = serializers.CharField(max_length=120)
     size = serializers.IntegerField(min_value=1)
@@ -42,6 +138,7 @@ class ReferenceImageSerializer(serializers.Serializer):
     uploadedAt = serializers.DateTimeField(required=False)
 
     def validate(self, attrs):
+        attrs = ensure_reference_image_id(attrs)
         uploaded_at = attrs.get("uploadedAt")
         if uploaded_at is not None:
             attrs["uploadedAt"] = uploaded_at.isoformat().replace("+00:00", "Z")
@@ -62,8 +159,10 @@ class ReferenceImageSerializer(serializers.Serializer):
         if hasattr(uploaded_at, "isoformat"):
             uploaded_at = uploaded_at.isoformat().replace("+00:00", "Z")
 
+        normalized_instance = ensure_reference_image_id(instance)
+
         data = {
-            "id": str(instance.get("id") or ""),
+            "id": str(normalized_instance.get("id") or ""),
             "name": str(instance.get("name") or ""),
             "mimeType": str(instance.get("mimeType") or ""),
             "size": normalized_size,
@@ -118,6 +217,16 @@ class PreBriefSerializer(serializers.Serializer):
     contactPhone = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
     category = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
     referenceImage = ReferenceImageSerializer(required=False, allow_null=True, default=None)
+    referenceImages = ReferenceImageSerializer(many=True, required=False, default=list)
+
+    def validate(self, attrs):
+        has_reference_fields = "referenceImage" in attrs or "referenceImages" in attrs
+        if not has_reference_fields:
+            return attrs
+
+        images = extract_reference_images(attrs)
+        validate_reference_images_count(images)
+        return with_reference_images(attrs, images)
 
 
 class ClientBriefSerializer(serializers.Serializer):
@@ -130,6 +239,7 @@ class ClientBriefSerializer(serializers.Serializer):
     contactPhone = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
     category = serializers.CharField(required=False, allow_blank=True, max_length=80, default="")
     referenceImage = ReferenceImageSerializer(required=False, allow_null=True, default=None)
+    referenceImages = ReferenceImageSerializer(many=True, required=False, default=list)
     leadStatus = serializers.ChoiceField(
         choices=["PENDIENTE", "CALIFICADO", "DESCARTADO"],
         required=False,
@@ -139,6 +249,15 @@ class ClientBriefSerializer(serializers.Serializer):
     leadTargetDate = serializers.CharField(required=False, allow_blank=True, default="")
     leadNotes = serializers.CharField(required=False, allow_blank=True, default="")
     requirements = RequirementSerializer(many=True, required=False, default=list)
+
+    def validate(self, attrs):
+        has_reference_fields = "referenceImage" in attrs or "referenceImages" in attrs
+        if not has_reference_fields:
+            return attrs
+
+        images = extract_reference_images(attrs)
+        validate_reference_images_count(images)
+        return with_reference_images(attrs, images)
 
 
 class TechSpecsSerializer(serializers.Serializer):
@@ -236,7 +355,12 @@ class AdvancedModulesSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         for model_key in ["pre_brief", "client_brief", "tech_specs", "samples", "quality_reg", "changes"]:
             if model_key in validated_data:
-                setattr(instance, model_key, validated_data[model_key])
+                incoming = validated_data[model_key]
+                current = getattr(instance, model_key)
+                if isinstance(current, dict) and isinstance(incoming, dict):
+                    setattr(instance, model_key, {**current, **incoming})
+                else:
+                    setattr(instance, model_key, incoming)
         request = self.context.get("request")
         if request and request.user and request.user.is_authenticated:
             instance.updated_by = request.user

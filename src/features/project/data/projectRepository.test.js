@@ -20,7 +20,13 @@ function buildProject() {
     id: "project-1",
     locked: false,
     preBrief: { validated: false, clientName: "Cliente base" },
-    clientBrief: { clientName: "Cliente base", requirements: [] },
+    clientBrief: {
+      clientName: "Cliente base",
+      leadStatus: "CALIFICADO",
+      leadTargetDate: "2026-04-10",
+      referenceImages: [{ id: "img-base", name: "base.png", mimeType: "image/png", size: 67 }],
+      requirements: [],
+    },
     techSpecs: { phMin: 5.2, phMax: 6.0 },
     samples: {
       items: [
@@ -59,6 +65,7 @@ describe("projectRepository extracted methods", () => {
       })
     );
     expect(updated.clientBrief.clientName).toBe("Cliente nuevo");
+    expect(updated.clientBrief.leadTargetDate).toBe("2026-04-10");
   });
 
   it("supports extracted advanced module mutations without losing context", async () => {
