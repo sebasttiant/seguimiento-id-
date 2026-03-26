@@ -27,6 +27,7 @@ export default function Dropzone({
   onLoadFileContent,
   onPreviewError,
 }) {
+  const popupBlockedMessage = "No se pudo abrir la vista previa. El navegador bloqueó la pestaña emergente y no se pudo usar una alternativa.";
   const inputRef = useRef(null);
   const blobUrlCacheRef = useRef(new Map());
   const [isOver, setIsOver] = useState(false);
@@ -111,6 +112,12 @@ export default function Dropzone({
       }
     };
 
+    const initialPopupWindow = openPreviewWindow("about:blank");
+    const popupAvailable = Boolean(initialPopupWindow && !initialPopupWindow.__fallback);
+    const previewOptions = popupAvailable
+      ? undefined
+      : { attemptPopup: false, fallbackToSameTab: true };
+
     const fail = (message, popupWindow) => {
       if (popupWindow) {
         try {
@@ -126,18 +133,18 @@ export default function Dropzone({
       const source = getPreviewSource(fileItem);
 
       if (source?.kind === "url") {
-        const popupWindow = openPreviewWindow(source.href);
+        const popupWindow = openPreviewWindow(source.href, initialPopupWindow, previewOptions);
         if (!popupWindow) {
-          fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
+          fail(popupBlockedMessage, initialPopupWindow);
         }
         return;
       }
 
       const cached = blobUrlCacheRef.current.get(fileId);
       if (cached) {
-        const popupWindow = openPreviewWindow(cached);
+        const popupWindow = openPreviewWindow(cached, initialPopupWindow, previewOptions);
         if (!popupWindow) {
-          fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
+          fail(popupBlockedMessage, initialPopupWindow);
         }
         return;
       }
@@ -146,9 +153,9 @@ export default function Dropzone({
         const url = base64ToBlobUrl(source.base64, source.mimeType);
         if (url) {
           blobUrlCacheRef.current.set(fileId, url);
-          const popupWindow = openPreviewWindow(url);
+          const popupWindow = openPreviewWindow(url, initialPopupWindow, previewOptions);
           if (!popupWindow) {
-            fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
+            fail(popupBlockedMessage, initialPopupWindow);
           }
           return;
         }
@@ -158,12 +165,6 @@ export default function Dropzone({
       }
 
       if (typeof onLoadFileContent === "function") {
-        const popupWindow = openPreviewWindow("about:blank");
-        if (!popupWindow) {
-          fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.");
-          return;
-        }
-
         const loaded = await onLoadFileContent(fileItem);
         if (loaded?.contentBase64 || loaded?.previewUrl || loaded?.fileUrl || loaded?.downloadUrl || loaded?.url) {
           const enriched = { ...fileItem, ...loaded };
@@ -172,8 +173,8 @@ export default function Dropzone({
 
           const enrichedSource = getPreviewSource(enriched);
           if (enrichedSource?.kind === "url") {
-            if (!openPreviewWindow(enrichedSource.href, popupWindow)) {
-              fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.", popupWindow);
+            if (!openPreviewWindow(enrichedSource.href, initialPopupWindow, previewOptions)) {
+              fail(popupBlockedMessage, initialPopupWindow);
             }
             return;
           }
@@ -183,18 +184,18 @@ export default function Dropzone({
             const url = base64ToBlobUrl(enrichedSource.base64, mime);
             if (url) {
               blobUrlCacheRef.current.set(fileId, url);
-              if (!openPreviewWindow(url, popupWindow)) {
-                fail("No se pudo abrir la vista previa. El navegador bloqueo la pestaña emergente.", popupWindow);
+              if (!openPreviewWindow(url, initialPopupWindow, previewOptions)) {
+                fail(popupBlockedMessage, initialPopupWindow);
               }
               return;
             }
           }
 
-          fail("No se pudo preparar la vista previa de la imagen.", popupWindow);
+          fail("No se pudo preparar la vista previa de la imagen.", initialPopupWindow);
           return;
         }
 
-        fail("No se pudo cargar la imagen para la vista previa.", popupWindow);
+        fail("No se pudo cargar la imagen para la vista previa.", initialPopupWindow);
         return;
       }
 

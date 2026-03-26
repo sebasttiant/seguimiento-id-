@@ -60,7 +60,7 @@ describe("previewUtils", () => {
 
   it("navigates a popup window instead of leaving about:blank", () => {
     const popupWindow = {
-      document: { title: "", body: { innerHTML: "" } },
+      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
       location: { replace: vi.fn() },
       focus: vi.fn(),
       close: vi.fn(),
@@ -68,5 +68,35 @@ describe("previewUtils", () => {
 
     expect(openPreviewWindow("https://example.com/image.png", popupWindow)).toBe(popupWindow);
     expect(popupWindow.location.replace).toHaveBeenCalledWith("https://example.com/image.png");
+  });
+
+  it("falls back to same-tab navigation when popup is blocked", () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", {
+      location: { assign },
+    });
+
+    const result = openPreviewWindow("https://example.com/image.png", null, {
+      attemptPopup: false,
+      fallbackToSameTab: true,
+    });
+
+    expect(result).toEqual({ __fallback: "same-tab" });
+    expect(assign).toHaveBeenCalledWith("https://example.com/image.png");
+  });
+
+  it("does not navigate away when only opening about:blank placeholder fails", () => {
+    const assign = vi.fn();
+    vi.stubGlobal("window", {
+      location: { assign },
+    });
+
+    const result = openPreviewWindow("about:blank", null, {
+      attemptPopup: false,
+      fallbackToSameTab: true,
+    });
+
+    expect(result).toBeNull();
+    expect(assign).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,5 @@
 const PREVIEW_URL_SCHEME_RE = /^(https?:|blob:|data:)/i;
+const ABOUT_BLANK_RE = /^about:blank$/i;
 
 function firstString(...values) {
   for (const value of values) {
@@ -68,14 +69,96 @@ export function base64ToBlobUrl(base64Value, mimeType) {
   }
 }
 
-export function openPreviewWindow(url, popupWindow) {
-  const nextPopupWindow =
-    popupWindow || (typeof window !== "undefined" ? window.open("", "_blank", "noopener,noreferrer") : null);
+function writeLoadingDocument(popupWindow) {
+  popupWindow.document.open();
+  popupWindow.document.write(`<!doctype html>
+<html>
+  <head>
+    <title>Vista previa</title>
+    <style>
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #ffffff;
+        font-family: sans-serif;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        color: #475569;
+      }
+    </style>
+  </head>
+  <body>Cargando vista previa…</body>
+</html>`);
+  popupWindow.document.close();
+}
 
-  if (!nextPopupWindow) return null;
+function navigateInCurrentTab(url) {
+  if (typeof window === "undefined") return false;
 
   try {
-    const safeUrl = String(url || "")
+    if (typeof document !== "undefined" && document.createElement) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_self";
+      link.rel = "noreferrer";
+      document.body?.appendChild(link);
+      link.click();
+      link.remove();
+      return true;
+    }
+  } catch {
+    // Fall back to location navigation.
+  }
+
+  try {
+    window.location.assign(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function openPreviewWindow(url, popupWindow, options = {}) {
+  const { fallbackToSameTab = true, attemptPopup = true } = options;
+  const normalizedUrl = String(url || "").trim();
+  const canNavigate = isPreviewUrl(normalizedUrl);
+  const isAboutBlank = ABOUT_BLANK_RE.test(normalizedUrl);
+
+  const nextPopupWindow =
+    popupWindow ||
+    (typeof window !== "undefined" && attemptPopup
+      ? window.open("", "_blank")
+      : null);
+
+  if (!nextPopupWindow) {
+    if (fallbackToSameTab && canNavigate && !isAboutBlank && navigateInCurrentTab(normalizedUrl)) {
+      return { __fallback: "same-tab" };
+    }
+    return null;
+  }
+
+  if (!popupWindow) {
+    try {
+      nextPopupWindow.opener = null;
+    } catch {
+      // Ignore security errors.
+    }
+  }
+
+  if (isAboutBlank) {
+    try {
+      writeLoadingDocument(nextPopupWindow);
+      nextPopupWindow.focus?.();
+      return nextPopupWindow;
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const safeUrl = normalizedUrl
       .replaceAll("&", "&amp;")
       .replaceAll('"', "&quot;")
       .replaceAll("<", "&lt;")
@@ -122,7 +205,7 @@ export function openPreviewWindow(url, popupWindow) {
   // black/broken display in some browsers because the browser replaces the
   // rendered page with a raw resource navigation that may fail or show nothing.
   // Only use location.replace() for http/https navigable URLs.
-  const isNavigableUrl = /^https?:/i.test(String(url || ""));
+  const isNavigableUrl = /^https?:/i.test(normalizedUrl);
 
   if (!isNavigableUrl) {
     nextPopupWindow.focus?.();
@@ -130,10 +213,14 @@ export function openPreviewWindow(url, popupWindow) {
   }
 
   try {
-    nextPopupWindow.location.replace(url);
+    nextPopupWindow.location.replace(normalizedUrl);
     nextPopupWindow.focus?.();
     return nextPopupWindow;
   } catch {
+    if (fallbackToSameTab && navigateInCurrentTab(normalizedUrl)) {
+      return { __fallback: "same-tab" };
+    }
+
     try {
       nextPopupWindow.close?.();
     } catch {
