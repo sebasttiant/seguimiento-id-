@@ -48,7 +48,18 @@ export function canPreviewFile(fileItem, onLoadFileContent) {
   if (getPreviewSource(fileItem)) return true;
 
   const mimeType = String(fileItem.mimeType || fileItem.type || "");
-  return mimeType.startsWith("image/") && typeof onLoadFileContent === "function";
+  const supportsLazy = mimeType.startsWith("image/") || mimeType === "application/pdf";
+  return supportsLazy && typeof onLoadFileContent === "function";
+}
+
+function isImageMimeType(mimeType) {
+  return String(mimeType || "").toLowerCase().startsWith("image/");
+}
+
+function isLikelyImageUrl(url) {
+  const value = String(url || "").toLowerCase();
+  if (value.startsWith("data:image/")) return true;
+  return /\.(png|jpg|jpeg|webp|gif|svg)(\?.*)?$/.test(value);
 }
 
 export function base64ToBlobUrl(base64Value, mimeType) {
@@ -121,7 +132,7 @@ function navigateInCurrentTab(url) {
 }
 
 export function openPreviewWindow(url, popupWindow, options = {}) {
-  const { fallbackToSameTab = true, attemptPopup = true } = options;
+  const { fallbackToSameTab = true, attemptPopup = true, mimeType = "" } = options;
   const normalizedUrl = String(url || "").trim();
   const canNavigate = isPreviewUrl(normalizedUrl);
   const isAboutBlank = ABOUT_BLANK_RE.test(normalizedUrl);
@@ -164,6 +175,7 @@ export function openPreviewWindow(url, popupWindow, options = {}) {
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;");
     nextPopupWindow.document.open();
+    const renderImage = isImageMimeType(mimeType) || isLikelyImageUrl(normalizedUrl);
     nextPopupWindow.document.write(`<!doctype html>
 <html>
   <head>
@@ -181,7 +193,7 @@ export function openPreviewWindow(url, popupWindow, options = {}) {
         padding: 24px;
         box-sizing: border-box;
       }
-      img {
+      .preview-image {
         max-width: min(100vw - 48px, 1200px);
         max-height: calc(100vh - 48px);
         object-fit: contain;
@@ -189,10 +201,21 @@ export function openPreviewWindow(url, popupWindow, options = {}) {
         border-radius: 16px;
         background: #fff;
       }
+      .preview-embed {
+        width: min(100vw - 48px, 1200px);
+        height: calc(100vh - 48px);
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        background: #fff;
+      }
     </style>
   </head>
   <body>
-    <img src="${safeUrl}" alt="Vista previa" />
+    ${
+      renderImage
+        ? `<img class="preview-image" src="${safeUrl}" alt="Vista previa" />`
+        : `<iframe class="preview-embed" src="${safeUrl}" title="Vista previa" />`
+    }
   </body>
 </html>`);
     nextPopupWindow.document.close();

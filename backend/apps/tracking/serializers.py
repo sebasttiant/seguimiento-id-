@@ -10,9 +10,21 @@ from .models import Project, ProjectAdvancedData, Task
 
 MAX_REFERENCE_IMAGE_SIZE_BYTES = int(getattr(settings, "REFERENCE_IMAGE_MAX_SIZE_BYTES", 5 * 1024 * 1024))
 MAX_REFERENCE_IMAGES_COUNT = int(getattr(settings, "REFERENCE_IMAGES_MAX_COUNT", 5))
+MAX_QUALITY_REG_FILE_SIZE_BYTES = int(getattr(settings, "QUALITY_REG_FILE_MAX_SIZE_BYTES", 10 * 1024 * 1024))
+MAX_QUALITY_REG_FILES_PER_CATEGORY = int(getattr(settings, "QUALITY_REG_FILES_PER_CATEGORY_MAX", 20))
 
 
 REFERENCE_IMAGE_METADATA_FIELDS = ["id", "name", "mimeType", "size", "uploadedAt"]
+QUALITY_REG_FILE_METADATA_FIELDS = ["id", "name", "mimeType", "size", "uploadedAt"]
+QUALITY_REG_ALLOWED_MIME_TYPES = (
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/svg+xml",
+)
 
 
 def _normalized_reference_image_text(value):
@@ -65,6 +77,80 @@ def ensure_reference_image_id(image_data, fallback_id=""):
         return image_data
 
     return {**image_data, "id": _build_reference_image_id(image_data)}
+
+
+def _has_quality_reg_file_payload(file_data):
+    if not isinstance(file_data, dict):
+        return False
+
+    if _normalized_reference_image_text(file_data.get("contentBase64")):
+        return True
+
+    for field in ["name", "mimeType", "uploadedAt", "url", "previewUrl", "downloadUrl", "fileUrl"]:
+        if _normalized_reference_image_text(file_data.get(field)):
+            return True
+
+    try:
+        return int(file_data.get("size") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _build_quality_reg_file_id(file_data):
+    payload = {
+        "name": _normalized_reference_image_text(file_data.get("name")),
+        "mimeType": _normalized_reference_image_text(file_data.get("mimeType")),
+        "size": _normalized_reference_image_text(file_data.get("size")),
+        "uploadedAt": _normalized_reference_image_text(file_data.get("uploadedAt")),
+        "contentBase64": _normalized_reference_image_text(file_data.get("contentBase64")),
+        "url": _normalized_reference_image_text(file_data.get("url")),
+    }
+    fingerprint = "|".join(payload.values())
+    digest = hashlib.sha1(fingerprint.encode("utf-8")).hexdigest()[:16]
+    return f"doc-{digest}"
+
+
+def ensure_quality_reg_file_id(file_data, fallback_id=""):
+    if not isinstance(file_data, dict):
+        return file_data
+
+    current_id = _normalized_reference_image_text(file_data.get("id"))
+    if current_id:
+        return {**file_data, "id": current_id}
+
+    fallback = _normalized_reference_image_text(fallback_id)
+    if fallback:
+        return {**file_data, "id": fallback}
+
+    if not _has_quality_reg_file_payload(file_data):
+        return file_data
+
+    return {**file_data, "id": _build_quality_reg_file_id(file_data)}
+
+
+def quality_reg_file_metadata(file_data):
+    if not isinstance(file_data, dict):
+        return file_data
+    normalized = ensure_quality_reg_file_id(file_data)
+    return {key: normalized[key] for key in QUALITY_REG_FILE_METADATA_FIELDS if key in normalized}
+
+
+def normalize_quality_reg_files(files_payload):
+    if not isinstance(files_payload, list):
+        return []
+    return [ensure_quality_reg_file_id(item) for item in files_payload if isinstance(item, dict)]
+
+
+def validate_quality_reg_files_count(field_name, files_payload):
+    total = len(files_payload or [])
+    if total > MAX_QUALITY_REG_FILES_PER_CATEGORY:
+        raise serializers.ValidationError(
+            {
+                field_name: [
+                    f"Solo puedes cargar hasta {MAX_QUALITY_REG_FILES_PER_CATEGORY} adjuntos por categoría."
+                ]
+            }
+        )
 
 
 def reference_image_metadata(image_data):
@@ -312,12 +398,137 @@ class SamplesSerializer(serializers.Serializer):
 
 
 class QualityRegSerializer(serializers.Serializer):
-    chamberOfCommerceFiles = serializers.ListField(child=serializers.JSONField(), required=False, default=list)
-    rutFiles = serializers.ListField(child=serializers.JSONField(), required=False, default=list)
-    labelProjectFiles = serializers.ListField(child=serializers.JSONField(), required=False, default=list)
-    technicalSheetsFiles = serializers.ListField(child=serializers.JSONField(), required=False, default=list)
-    transportTests = serializers.CharField(required=False, allow_blank=True, default="")
-    packagingCharacteristics = serializers.CharField(required=False, allow_blank=True, default="")
+    class QualityRegFileSerializer(serializers.Serializer):
+        id = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+        name = serializers.CharField(max_length=255)
+        mimeType = serializers.CharField(max_length=120)
+        size = serializers.IntegerField(min_value=1)
+        contentBase64 = serializers.CharField(required=False, allow_blank=True, default="")
+        uploadedAt = serializers.DateTimeField(required=False)
+
+        def validate(self, attrs):
+            attrs = ensure_quality_reg_file_id(attrs)
+            uploaded_at = attrs.get("uploadedAt")
+            if uploaded_at is not None:
+                attrs["uploadedAt"] = uploaded_at.isoformat().replace("+00:00", "Z")
+            return attrs
+
+        def to_representation(self, instance):
+            if not isinstance(instance, dict):
+                return super().to_representation(instance)
+
+            size_value = instance.get("size")
+            try:
+                normalized_size = int(size_value)
+            except (TypeError, ValueError):
+                normalized_size = 0
+
+            uploaded_at = instance.get("uploadedAt")
+            if hasattr(uploaded_at, "isoformat"):
+                uploaded_at = uploaded_at.isoformat().replace("+00:00", "Z")
+
+            normalized_instance = ensure_quality_reg_file_id(instance)
+            data = {
+                "id": str(normalized_instance.get("id") or ""),
+                "name": str(instance.get("name") or ""),
+                "mimeType": str(instance.get("mimeType") or "application/octet-stream"),
+                "size": normalized_size,
+            }
+
+            if uploaded_at:
+                data["uploadedAt"] = uploaded_at
+
+            content_base64 = instance.get("contentBase64")
+            if content_base64:
+                data["contentBase64"] = str(content_base64)
+
+            for field in ["url", "previewUrl", "downloadUrl", "fileUrl"]:
+                if instance.get(field):
+                    data[field] = str(instance[field])
+
+            return data
+
+        def validate_mimeType(self, value):
+            mime_type = str(value or "").lower().strip()
+            if mime_type in QUALITY_REG_ALLOWED_MIME_TYPES:
+                return mime_type
+            raise serializers.ValidationError("Solo se permiten archivos PDF o imágenes.")
+
+        def validate_size(self, value):
+            if value > MAX_QUALITY_REG_FILE_SIZE_BYTES:
+                max_mb = MAX_QUALITY_REG_FILE_SIZE_BYTES / (1024 * 1024)
+                raise serializers.ValidationError(f"El archivo no puede superar {max_mb:.1f} MB.")
+            return value
+
+        def validate_contentBase64(self, value):
+            if not str(value or "").strip():
+                return value
+            try:
+                decoded = base64.b64decode(value, validate=True)
+            except Exception as exc:  # noqa: BLE001
+                raise serializers.ValidationError("El contenido base64 es inválido.") from exc
+
+            if len(decoded) > MAX_QUALITY_REG_FILE_SIZE_BYTES:
+                max_mb = MAX_QUALITY_REG_FILE_SIZE_BYTES / (1024 * 1024)
+                raise serializers.ValidationError(f"El archivo no puede superar {max_mb:.1f} MB.")
+            return value
+
+    chamberOfCommerceFiles = QualityRegFileSerializer(many=True, required=False, default=list)
+    rutFiles = QualityRegFileSerializer(many=True, required=False, default=list)
+    labelProjectFiles = QualityRegFileSerializer(many=True, required=False, default=list)
+    technicalSheetsFiles = QualityRegFileSerializer(many=True, required=False, default=list)
+    transportTests = serializers.JSONField(required=False, default=dict)
+    packagingCharacteristics = serializers.JSONField(required=False, default=dict)
+
+    def validate(self, attrs):
+        result = {**attrs}
+        for field_name in [
+            "chamberOfCommerceFiles",
+            "rutFiles",
+            "labelProjectFiles",
+            "technicalSheetsFiles",
+        ]:
+            if field_name not in result:
+                continue
+            normalized = normalize_quality_reg_files(result.get(field_name))
+            validate_quality_reg_files_count(field_name, normalized)
+            result[field_name] = normalized
+
+        transport_tests = result.get("transportTests")
+        if isinstance(transport_tests, str):
+            result["transportTests"] = {
+                "vibration": False,
+                "temperature": False,
+                "dropTest": False,
+                "notes": transport_tests,
+            }
+        elif transport_tests is None:
+            result["transportTests"] = {
+                "vibration": False,
+                "temperature": False,
+                "dropTest": False,
+                "notes": "",
+            }
+
+        packaging = result.get("packagingCharacteristics")
+        if isinstance(packaging, str):
+            result["packagingCharacteristics"] = {
+                "material": "",
+                "presentation": "",
+                "closure": "",
+                "capacity": "",
+                "compatibilityNotes": packaging,
+            }
+        elif packaging is None:
+            result["packagingCharacteristics"] = {
+                "material": "",
+                "presentation": "",
+                "closure": "",
+                "capacity": "",
+                "compatibilityNotes": "",
+            }
+
+        return result
 
 
 class ChangeItemSerializer(serializers.Serializer):

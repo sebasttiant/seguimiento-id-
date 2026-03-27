@@ -4,6 +4,7 @@ const LEGACY_SHADOW_KEY = "crm_project_api_shadow_v1";
 const LEGACY_PROJECTS_LIST_KEY = "crm-projects";
 const LEGACY_PROJECTS_MAP_KEY = "crm_rnd_projects_v2";
 const MAX_REFERENCE_IMAGES = 5;
+const MAX_QUALITY_REG_FILES_PER_CATEGORY = 20;
 
 function mapBackendStatusToLocked(status) {
   return status === "archived";
@@ -89,6 +90,96 @@ function normalizeModuleReferenceImage(moduleData) {
   return copy;
 }
 
+function normalizeQualityRegFile(fileItem) {
+  if (!fileItem || typeof fileItem !== "object") return null;
+
+  const normalized = {
+    id: firstString(fileItem.id) || createReferenceImageId(),
+    name: firstString(fileItem.name, fileItem.fileName) || "adjunto",
+    mimeType: firstString(fileItem.mimeType, fileItem.type) || "application/octet-stream",
+    size: Number.isFinite(Number(fileItem.size)) && Number(fileItem.size) > 0 ? Math.floor(Number(fileItem.size)) : 1,
+  };
+
+  const contentBase64 = firstString(fileItem.contentBase64);
+  if (contentBase64) normalized.contentBase64 = contentBase64;
+
+  for (const field of ["uploadedAt", "url", "previewUrl", "downloadUrl", "fileUrl"]) {
+    const value = firstString(fileItem[field]);
+    if (value) normalized[field] = value;
+  }
+
+  return normalized;
+}
+
+function normalizeQualityRegFiles(collection) {
+  if (!Array.isArray(collection)) return [];
+
+  return collection
+    .map((item) => normalizeQualityRegFile(item))
+    .filter(Boolean)
+    .slice(0, MAX_QUALITY_REG_FILES_PER_CATEGORY);
+}
+
+function normalizeTransportTests(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return {
+      vibration: Boolean(value.vibration),
+      temperature: Boolean(value.temperature),
+      dropTest: Boolean(value.dropTest),
+      notes: firstString(value.notes) || "",
+    };
+  }
+
+  return {
+    vibration: false,
+    temperature: false,
+    dropTest: false,
+    notes: firstString(value) || "",
+  };
+}
+
+function normalizePackaging(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return {
+      material: firstString(value.material) || "",
+      presentation: firstString(value.presentation) || "",
+      closure: firstString(value.closure) || "",
+      capacity: firstString(value.capacity) || "",
+      compatibilityNotes: firstString(value.compatibilityNotes) || "",
+    };
+  }
+
+  return {
+    material: "",
+    presentation: "",
+    closure: "",
+    capacity: "",
+    compatibilityNotes: firstString(value) || "",
+  };
+}
+
+function normalizeQualityReg(moduleData) {
+  if (!moduleData || typeof moduleData !== "object") {
+    return {
+      chamberOfCommerceFiles: [],
+      rutFiles: [],
+      labelProjectFiles: [],
+      technicalSheetsFiles: [],
+      transportTests: normalizeTransportTests(null),
+      packagingCharacteristics: normalizePackaging(null),
+    };
+  }
+
+  return {
+    chamberOfCommerceFiles: normalizeQualityRegFiles(moduleData.chamberOfCommerceFiles || moduleData.docsChamber),
+    rutFiles: normalizeQualityRegFiles(moduleData.rutFiles || moduleData.docsRUT),
+    labelProjectFiles: normalizeQualityRegFiles(moduleData.labelProjectFiles || moduleData.docsLabelArt),
+    technicalSheetsFiles: normalizeQualityRegFiles(moduleData.technicalSheetsFiles || moduleData.docsTechSheet),
+    transportTests: normalizeTransportTests(moduleData.transportTests),
+    packagingCharacteristics: normalizePackaging(moduleData.packagingCharacteristics || moduleData.packaging),
+  };
+}
+
 function getDefaultModules() {
   return {
     preBrief: {
@@ -124,7 +215,25 @@ function getDefaultModules() {
     },
     techSpecs: {},
     samples: { items: [] },
-    qualityReg: {},
+    qualityReg: {
+      chamberOfCommerceFiles: [],
+      rutFiles: [],
+      labelProjectFiles: [],
+      technicalSheetsFiles: [],
+      transportTests: {
+        vibration: false,
+        temperature: false,
+        dropTest: false,
+        notes: "",
+      },
+      packagingCharacteristics: {
+        material: "",
+        presentation: "",
+        closure: "",
+        capacity: "",
+        compatibilityNotes: "",
+      },
+    },
     changes: { items: [] },
   };
 }
@@ -153,8 +262,8 @@ function normalizeAdvancedModules(input = {}) {
       items: Array.isArray(input?.samples?.items) ? input.samples.items : defaults.samples.items,
     },
     qualityReg: {
-      ...defaults.qualityReg,
-      ...(input.qualityReg || {}),
+      ...normalizeQualityReg(defaults.qualityReg),
+      ...normalizeQualityReg(input.qualityReg),
     },
     changes: {
       ...defaults.changes,

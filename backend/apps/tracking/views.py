@@ -9,6 +9,7 @@ from .serializers import (
     AdvancedModulesSerializer,
     ChangesSerializer,
     ClientBriefSerializer,
+    MAX_REFERENCE_IMAGES_COUNT,
     PreBriefSerializer,
     ProjectSerializer,
     QualityRegSerializer,
@@ -52,7 +53,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return advanced_data
 
     @staticmethod
-    def _normalize_incoming_module_reference_images(module_data, existing_module):
+    def _normalize_incoming_module_reference_images(module_data, existing_module, append_mode=False):
         if not isinstance(module_data, dict):
             return module_data
 
@@ -66,6 +67,46 @@ class ProjectViewSet(viewsets.ModelViewSet):
         }
 
         incoming_images = extract_reference_images(module_data)
+
+        if append_mode:
+            merged_images = [
+                ensure_reference_image_id(image)
+                for image in existing_images
+                if isinstance(image, dict)
+            ]
+            merged_index_by_id = {
+                image.get("id"): index
+                for index, image in enumerate(merged_images)
+                if isinstance(image, dict) and image.get("id")
+            }
+
+            for image_data in incoming_images:
+                normalized_image = ensure_reference_image_id(image_data)
+                if "contentBase64" not in normalized_image:
+                    existing_image = existing_by_id.get(normalized_image.get("id"))
+                    if isinstance(existing_image, dict) and existing_image.get("contentBase64"):
+                        normalized_image = {
+                            **normalized_image,
+                            "contentBase64": existing_image["contentBase64"],
+                        }
+
+                image_id = normalized_image.get("id")
+                existing_index = merged_index_by_id.get(image_id)
+                if existing_index is not None:
+                    merged_images[existing_index] = {
+                        **merged_images[existing_index],
+                        **normalized_image,
+                    }
+                    continue
+
+                if len(merged_images) >= MAX_REFERENCE_IMAGES_COUNT:
+                    continue
+
+                merged_index_by_id[image_id] = len(merged_images)
+                merged_images.append(normalized_image)
+
+            return with_reference_images(module_data, merged_images)
+
         normalized_images = []
         for index, image_data in enumerate(incoming_images):
             fallback_id = ""
@@ -86,6 +127,63 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return with_reference_images(module_data, normalized_images)
 
     @classmethod
+    def _inherit_client_brief_images_on_qualified_transition(cls, incoming_data, advanced_data):
+        if not isinstance(incoming_data, dict):
+            return incoming_data
+
+        client_brief = incoming_data.get("clientBrief")
+        if not isinstance(client_brief, dict):
+            return incoming_data
+
+        incoming_status = str(client_brief.get("leadStatus") or "").upper()
+        current_client_brief = getattr(advanced_data, "client_brief", {}) or {}
+        current_status = str(current_client_brief.get("leadStatus") or "PENDIENTE").upper()
+        is_calificado_transition = incoming_status == "CALIFICADO" and current_status != "CALIFICADO"
+        if not is_calificado_transition:
+            return incoming_data
+
+        incoming_client_images = extract_reference_images(client_brief)
+        if incoming_client_images:
+            return incoming_data
+
+        pre_brief_source = incoming_data.get("preBrief")
+        if not isinstance(pre_brief_source, dict):
+            pre_brief_source = getattr(advanced_data, "pre_brief", {}) or {}
+
+        inherited_images = extract_reference_images(pre_brief_source)
+        if not inherited_images:
+            return incoming_data
+
+        next_client_brief = with_reference_images(client_brief, inherited_images)
+        return {
+            **incoming_data,
+            "clientBrief": next_client_brief,
+        }
+
+    @classmethod
+    def _inherit_client_module_images_on_qualified_transition(cls, incoming_data, advanced_data):
+        if not isinstance(incoming_data, dict):
+            return incoming_data
+
+        incoming_status = str(incoming_data.get("leadStatus") or "").upper()
+        current_client_brief = getattr(advanced_data, "client_brief", {}) or {}
+        current_status = str(current_client_brief.get("leadStatus") or "PENDIENTE").upper()
+        is_calificado_transition = incoming_status == "CALIFICADO" and current_status != "CALIFICADO"
+        if not is_calificado_transition:
+            return incoming_data
+
+        incoming_client_images = extract_reference_images(incoming_data)
+        if incoming_client_images:
+            return incoming_data
+
+        pre_brief_source = getattr(advanced_data, "pre_brief", {}) or {}
+        inherited_images = extract_reference_images(pre_brief_source)
+        if not inherited_images:
+            return incoming_data
+
+        return with_reference_images(incoming_data, inherited_images)
+
+    @classmethod
     def _normalize_incoming_reference_images(cls, incoming_data, advanced_data):
         result = {**incoming_data}
         for camel_key, db_field in [("preBrief", "pre_brief"), ("clientBrief", "client_brief")]:
@@ -93,8 +191,36 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 continue
             module_data = result.get(camel_key)
             existing_module = getattr(advanced_data, db_field) or {}
-            result[camel_key] = cls._normalize_incoming_module_reference_images(module_data, existing_module)
-        return result
+            result[camel_key] = cls._normalize_incoming_module_reference_images(
+                module_data,
+                existing_module,
+                append_mode=db_field == "pre_brief",
+            )
+
+        return cls._inherit_client_brief_images_on_qualified_transition(result, advanced_data)
+
+    @staticmethod
+    def _normalize_quality_reg_aliases(module_data):
+        if not isinstance(module_data, dict):
+            return module_data
+
+        normalized = {**module_data}
+        legacy_map = {
+            "docsChamber": "chamberOfCommerceFiles",
+            "docsRUT": "rutFiles",
+            "docsLabelArt": "labelProjectFiles",
+            "docsTechSheet": "technicalSheetsFiles",
+            "transportTests": "transportTests",
+            "packaging": "packagingCharacteristics",
+        }
+
+        for legacy_key, canonical_key in legacy_map.items():
+            if canonical_key in normalized:
+                continue
+            if legacy_key in normalized:
+                normalized[canonical_key] = normalized.get(legacy_key)
+
+        return normalized
 
     @action(detail=True, methods=["get", "patch"], url_path="advanced-modules")
     def advanced_modules(self, request, pk=None):
@@ -108,6 +234,11 @@ class ProjectViewSet(viewsets.ModelViewSet):
         incoming_data = request.data
         if isinstance(incoming_data, dict):
             incoming_data = self._normalize_incoming_reference_images(incoming_data, advanced_data)
+            if isinstance(incoming_data.get("qualityReg"), dict):
+                incoming_data = {
+                    **incoming_data,
+                    "qualityReg": self._normalize_quality_reg_aliases(incoming_data.get("qualityReg")),
+                }
 
         serializer = AdvancedModulesSerializer(
             advanced_data,
@@ -139,7 +270,15 @@ class ProjectViewSet(viewsets.ModelViewSet):
         incoming = request.data
         if isinstance(incoming, dict):
             existing_module = getattr(advanced_data, field_name) or {}
-            incoming = self._normalize_incoming_module_reference_images(incoming, existing_module)
+            if field_name == "quality_reg":
+                incoming = self._normalize_quality_reg_aliases(incoming)
+            incoming = self._normalize_incoming_module_reference_images(
+                incoming,
+                existing_module,
+                append_mode=field_name == "pre_brief",
+            )
+            if field_name == "client_brief":
+                incoming = self._inherit_client_module_images_on_qualified_transition(incoming, advanced_data)
 
         serializer = serializer_class(data=incoming, partial=request.method == "PATCH")
         serializer.is_valid(raise_exception=True)

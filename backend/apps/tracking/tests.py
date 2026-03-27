@@ -549,6 +549,201 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(second_image_response.data["referenceImage"]["id"], "img-new")
         self.assertEqual(second_image_response.data["referenceImage"]["contentBase64"], second_content)
 
+    def test_prebrief_reference_images_patch_appends_new_entries_up_to_five(self):
+        self.client.force_authenticate(self.editor)
+
+        image_content_a = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+        image_content_b = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNkYAAAAAIAAeIhvDMAAAAASUVORK5CYII="
+        image_content_c = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNiYAAAAAIAAeIhvDMAAAAASUVORK5CYII="
+
+        first_patch = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/prebrief/",
+            {
+                "referenceImages": [
+                    self._build_image("img-a", image_content_a),
+                    self._build_image("img-b", image_content_b),
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(first_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(first_patch.data["preBrief"]["referenceImages"]), 2)
+
+        second_patch = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/prebrief/",
+            {
+                "referenceImages": [self._build_image("img-c", image_content_c)],
+            },
+            format="json",
+        )
+        self.assertEqual(second_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in second_patch.data["preBrief"]["referenceImages"]],
+            ["img-a", "img-b", "img-c"],
+        )
+
+        cap_patch = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/prebrief/",
+            {
+                "referenceImages": [
+                    self._build_image("img-d", image_content_a),
+                    self._build_image("img-e", image_content_b),
+                    self._build_image("img-f", image_content_c),
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(cap_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in cap_patch.data["preBrief"]["referenceImages"]],
+            ["img-a", "img-b", "img-c", "img-d", "img-e"],
+        )
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        saved_images = advanced_data.pre_brief.get("referenceImages") or []
+        self.assertEqual(len(saved_images), 5)
+        self.assertEqual(saved_images[0]["id"], "img-a")
+        self.assertEqual(saved_images[2]["id"], "img-c")
+        self.assertEqual(saved_images[2]["contentBase64"], image_content_c)
+
+    def test_clientbrief_calificado_transition_inherits_prebrief_reference_images(self):
+        self.client.force_authenticate(self.editor)
+
+        prebrief_content = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+        prebrief_patch = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/prebrief/",
+            {
+                "referenceImages": [self._build_image("img-pre", prebrief_content)],
+            },
+            format="json",
+        )
+        self.assertEqual(prebrief_patch.status_code, status.HTTP_200_OK)
+
+        transition_patch = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/clientbrief/",
+            {
+                "leadStatus": "CALIFICADO",
+            },
+            format="json",
+        )
+        self.assertEqual(transition_patch.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in transition_patch.data["clientBrief"]["referenceImages"]],
+            ["img-pre"],
+        )
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        client_images = advanced_data.client_brief.get("referenceImages") or []
+        self.assertEqual(len(client_images), 1)
+        self.assertEqual(client_images[0]["id"], "img-pre")
+        self.assertEqual(client_images[0]["contentBase64"], prebrief_content)
+
+        image_response = self.client.get(
+            f"/api/projects/{self.project.id}/advanced-modules/image/clientbrief/?imageId=img-pre"
+        )
+        self.assertEqual(image_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(image_response.data["referenceImage"]["id"], "img-pre")
+        self.assertEqual(image_response.data["referenceImage"]["contentBase64"], prebrief_content)
+
+    def test_qualityreg_files_persist_by_category_and_survive_reload(self):
+        self.client.force_authenticate(self.editor)
+
+        payload = {
+            "chamberOfCommerceFiles": [
+                {
+                    "id": "doc-cc-1",
+                    "name": "camara.pdf",
+                    "mimeType": "application/pdf",
+                    "size": 1024,
+                    "contentBase64": "aGVsbG8=",
+                }
+            ],
+            "rutFiles": [
+                {
+                    "id": "doc-rut-1",
+                    "name": "rut.png",
+                    "mimeType": "image/png",
+                    "size": 67,
+                    "contentBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
+                }
+            ],
+            "labelProjectFiles": [],
+            "technicalSheetsFiles": [],
+            "transportTests": {
+                "vibration": True,
+                "temperature": False,
+                "dropTest": True,
+                "notes": "Validado",
+            },
+            "packagingCharacteristics": {
+                "material": "PET",
+                "compatibilityNotes": "Sin hallazgos",
+            },
+        }
+
+        write_response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/qualityreg/",
+            payload,
+            format="json",
+        )
+        self.assertEqual(write_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(write_response.data["qualityReg"]["chamberOfCommerceFiles"]), 1)
+        self.assertEqual(len(write_response.data["qualityReg"]["rutFiles"]), 1)
+
+        read_response = self.client.get(f"/api/projects/{self.project.id}/advanced-modules/")
+        self.assertEqual(read_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(read_response.data["qualityReg"]["chamberOfCommerceFiles"][0]["id"], "doc-cc-1")
+        self.assertEqual(read_response.data["qualityReg"]["rutFiles"][0]["id"], "doc-rut-1")
+        self.assertEqual(read_response.data["qualityReg"]["transportTests"]["notes"], "Validado")
+
+        advanced_data = ProjectAdvancedData.objects.get(project=self.project)
+        self.assertEqual(advanced_data.quality_reg["chamberOfCommerceFiles"][0]["id"], "doc-cc-1")
+        self.assertEqual(advanced_data.quality_reg["rutFiles"][0]["id"], "doc-rut-1")
+
+    def test_qualityreg_rejects_non_pdf_or_image_files(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/qualityreg/",
+            {
+                "technicalSheetsFiles": [
+                    {
+                        "id": "doc-docx-1",
+                        "name": "ficha.docx",
+                        "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "size": 500,
+                        "contentBase64": "aGVsbG8=",
+                    }
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("technicalSheetsFiles", response.data)
+
+    def test_qualityreg_accepts_legacy_aliases_for_attachments(self):
+        self.client.force_authenticate(self.editor)
+
+        response = self.client.patch(
+            f"/api/projects/{self.project.id}/advanced-modules/qualityreg/",
+            {
+                "docsChamber": [
+                    {
+                        "id": "doc-legacy-1",
+                        "name": "camara.pdf",
+                        "mimeType": "application/pdf",
+                        "size": 123,
+                        "contentBase64": "aGVsbG8=",
+                    }
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["qualityReg"]["chamberOfCommerceFiles"][0]["id"], "doc-legacy-1")
+
 
 class TrackingConsecutiveApiTests(APITestCase):
     def setUp(self):

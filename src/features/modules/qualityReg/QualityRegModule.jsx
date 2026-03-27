@@ -16,12 +16,18 @@ function Check({ label, disabled, checked, onChange }) {
 
 export default function QualityRegModule({ project, canEdit, onSave }) {
   const disabled = !canEdit;
+  const [filesError, setFilesError] = React.useState("");
 
   const form = useForm({
     resolver: zodResolver(qualityRegSchema),
     defaultValues: project.qualityReg,
     mode: "onChange",
   });
+
+  React.useEffect(() => {
+    form.reset(project.qualityReg);
+    setFilesError("");
+  }, [form, project.qualityReg]);
 
   const { register, handleSubmit, watch, setValue, formState: { isDirty, isSubmitting } } = form;
 
@@ -31,13 +37,27 @@ export default function QualityRegModule({ project, canEdit, onSave }) {
         <CardHeader title="Documentación (Adjuntos)" subtitle="Carga por categoría (Drag & Drop + preview)" right={<Badge tone="info">Archivos</Badge>} />
         <CardContent className="grid gap-4 md:grid-cols-2">
           <Dropzone label="Cámara de Comercio" helper="PDF o imágenes." accept=".pdf,image/*" disabled={disabled}
-            value={watch("docsChamber") || []} onChange={(v)=>setValue("docsChamber", v, { shouldDirty:true, shouldValidate:true })} />
+            maxFileSizeBytes={10 * 1024 * 1024}
+            value={watch("chamberOfCommerceFiles") || []} onChange={(v)=>setValue("chamberOfCommerceFiles", v, { shouldDirty:true, shouldValidate:true })}
+            onValidationError={(message) => setFilesError(message)} />
           <Dropzone label="RUT" helper="PDF o imágenes." accept=".pdf,image/*" disabled={disabled}
-            value={watch("docsRUT") || []} onChange={(v)=>setValue("docsRUT", v, { shouldDirty:true, shouldValidate:true })} />
+            maxFileSizeBytes={10 * 1024 * 1024}
+            value={watch("rutFiles") || []} onChange={(v)=>setValue("rutFiles", v, { shouldDirty:true, shouldValidate:true })}
+            onValidationError={(message) => setFilesError(message)} />
           <Dropzone label="Proyecto de etiqueta" helper="Artes / renders / PDF." accept=".pdf,image/*" disabled={disabled}
-            value={watch("docsLabelArt") || []} onChange={(v)=>setValue("docsLabelArt", v, { shouldDirty:true, shouldValidate:true })} />
-          <Dropzone label="Ficha Técnica" helper="PDF / Word / imágenes." accept=".pdf,.doc,.docx,image/*" disabled={disabled}
-            value={watch("docsTechSheet") || []} onChange={(v)=>setValue("docsTechSheet", v, { shouldDirty:true, shouldValidate:true })} />
+            maxFileSizeBytes={10 * 1024 * 1024}
+            value={watch("labelProjectFiles") || []} onChange={(v)=>setValue("labelProjectFiles", v, { shouldDirty:true, shouldValidate:true })}
+            onValidationError={(message) => setFilesError(message)} />
+          <Dropzone label="Ficha Técnica" helper="PDF o imágenes." accept=".pdf,image/*" disabled={disabled}
+            maxFileSizeBytes={10 * 1024 * 1024}
+            value={watch("technicalSheetsFiles") || []} onChange={(v)=>setValue("technicalSheetsFiles", v, { shouldDirty:true, shouldValidate:true })}
+            onValidationError={(message) => setFilesError(message)} />
+
+          {filesError ? (
+            <div className="md:col-span-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900">
+              {filesError}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -60,11 +80,11 @@ export default function QualityRegModule({ project, canEdit, onSave }) {
       <Card>
         <CardHeader title="Características del Envase" subtitle="Materiales + compatibilidad" right={<Badge tone="neutral">Packaging</Badge>} />
         <CardContent className="grid gap-3 md:grid-cols-2">
-          <div><Label>Material</Label><Input disabled={disabled} {...register("packaging.material")} placeholder="Ej: PET / PP / PEAD / Airless" /></div>
-          <div><Label>Presentación</Label><Input disabled={disabled} {...register("packaging.presentation")} placeholder="Ej: 120 mL, 250 mL, 1 kg" /></div>
-          <div><Label>Cierre / Tapa</Label><Input disabled={disabled} {...register("packaging.closure")} placeholder="Ej: Flip-top, bomba, spray" /></div>
-          <div><Label>Capacidad</Label><Input disabled={disabled} {...register("packaging.capacity")} placeholder="Ej: 100 mL" /></div>
-          <div className="md:col-span-2"><Label>Notas de compatibilidad</Label><Textarea disabled={disabled} {...register("packaging.compatibilityNotes")} placeholder="Compatibilidad envase-formulación, migración, estrés…" /></div>
+          <div><Label>Material</Label><Input disabled={disabled} {...register("packagingCharacteristics.material")} placeholder="Ej: PET / PP / PEAD / Airless" /></div>
+          <div><Label>Presentación</Label><Input disabled={disabled} {...register("packagingCharacteristics.presentation")} placeholder="Ej: 120 mL, 250 mL, 1 kg" /></div>
+          <div><Label>Cierre / Tapa</Label><Input disabled={disabled} {...register("packagingCharacteristics.closure")} placeholder="Ej: Flip-top, bomba, spray" /></div>
+          <div><Label>Capacidad</Label><Input disabled={disabled} {...register("packagingCharacteristics.capacity")} placeholder="Ej: 100 mL" /></div>
+          <div className="md:col-span-2"><Label>Notas de compatibilidad</Label><Textarea disabled={disabled} {...register("packagingCharacteristics.compatibilityNotes")} placeholder="Compatibilidad envase-formulación, migración, estrés…" /></div>
         </CardContent>
       </Card>
 

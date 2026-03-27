@@ -47,7 +47,7 @@ describe("previewUtils", () => {
   it("allows previewing image files in read only flows", () => {
     expect(canPreviewFile({ mimeType: "image/png", contentBase64: "aGVsbG8=" })).toBe(true);
     expect(canPreviewFile({ mimeType: "image/png" }, () => null)).toBe(true);
-    expect(canPreviewFile({ mimeType: "application/pdf" }, () => null)).toBe(false);
+    expect(canPreviewFile({ mimeType: "application/pdf" }, () => null)).toBe(true);
   });
 
   it("creates blob urls from base64 payloads", () => {

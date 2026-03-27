@@ -133,6 +133,44 @@ function ensureProject(project) {
   next.clientBrief.referenceImage = next.clientBrief.referenceImages[0] || null;
   next.clientBrief.category = normalizeCategory(next.clientBrief.category);
 
+  const qualityReg = project.qualityReg || {};
+  next.qualityReg = {
+    chamberOfCommerceFiles: Array.isArray(qualityReg.chamberOfCommerceFiles) ? qualityReg.chamberOfCommerceFiles : [],
+    rutFiles: Array.isArray(qualityReg.rutFiles) ? qualityReg.rutFiles : [],
+    labelProjectFiles: Array.isArray(qualityReg.labelProjectFiles) ? qualityReg.labelProjectFiles : [],
+    technicalSheetsFiles: Array.isArray(qualityReg.technicalSheetsFiles) ? qualityReg.technicalSheetsFiles : [],
+    transportTests:
+      qualityReg.transportTests && typeof qualityReg.transportTests === "object"
+        ? {
+            vibration: Boolean(qualityReg.transportTests.vibration),
+            temperature: Boolean(qualityReg.transportTests.temperature),
+            dropTest: Boolean(qualityReg.transportTests.dropTest),
+            notes: String(qualityReg.transportTests.notes || ""),
+          }
+        : {
+            vibration: false,
+            temperature: false,
+            dropTest: false,
+            notes: String(qualityReg.transportTests || ""),
+          },
+    packagingCharacteristics:
+      qualityReg.packagingCharacteristics && typeof qualityReg.packagingCharacteristics === "object"
+        ? {
+            material: String(qualityReg.packagingCharacteristics.material || ""),
+            presentation: String(qualityReg.packagingCharacteristics.presentation || ""),
+            closure: String(qualityReg.packagingCharacteristics.closure || ""),
+            capacity: String(qualityReg.packagingCharacteristics.capacity || ""),
+            compatibilityNotes: String(qualityReg.packagingCharacteristics.compatibilityNotes || ""),
+          }
+        : {
+            material: "",
+            presentation: "",
+            closure: "",
+            capacity: "",
+            compatibilityNotes: String(qualityReg.packagingCharacteristics || ""),
+          },
+  };
+
   next.samples = migrateSamples(project.samples);
   return next;
 }
@@ -258,8 +296,19 @@ export const projectRepository = {
         rutFiles: [],
         labelProjectFiles: [],
         technicalSheetsFiles: [],
-        transportTests: "",
-        packagingCharacteristics: "",
+        transportTests: {
+          vibration: false,
+          temperature: false,
+          dropTest: false,
+          notes: "",
+        },
+        packagingCharacteristics: {
+          material: "",
+          presentation: "",
+          closure: "",
+          capacity: "",
+          compatibilityNotes: "",
+        },
       },
       changes: {
         items: [],

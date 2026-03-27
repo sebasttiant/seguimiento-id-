@@ -28,12 +28,48 @@ export default function Dropzone({
   onPreviewError,
   maxFiles,
   onValidationError,
+  maxFileSizeBytes,
 }) {
   const popupBlockedMessage = "No se pudo abrir la vista previa. El navegador bloqueó la pestaña emergente y no se pudo usar una alternativa.";
   const inputRef = useRef(null);
   const blobUrlCacheRef = useRef(new Map());
   const [isOver, setIsOver] = useState(false);
   const [loadingIds, setLoadingIds] = useState({});
+
+  const notifyValidationError = useCallback(
+    (message) => {
+      if (typeof onValidationError === "function") {
+        onValidationError(message);
+      }
+    },
+    [onValidationError],
+  );
+
+  const isAcceptedFile = useCallback(
+    (file) => {
+      const rules = String(accept || "")
+        .split(",")
+        .map((rule) => rule.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (!rules.length) return true;
+
+      const fileType = String(file?.type || "").toLowerCase();
+      const fileName = String(file?.name || "").toLowerCase();
+      return rules.some((rule) => {
+        if (rule === "*/*") return true;
+        if (rule.endsWith("/*")) {
+          const [prefix] = rule.split("/");
+          return Boolean(prefix) && fileType.startsWith(`${prefix}/`);
+        }
+        if (rule.startsWith(".")) {
+          return fileName.endsWith(rule);
+        }
+        return fileType === rule;
+      });
+    },
+    [accept],
+  );
 
   // Keep a mutable ref to current value so handleView never has a stale closure
   const valueRef = useRef(value);
@@ -54,8 +90,26 @@ export default function Dropzone({
       return;
     }
 
+    const validSelection = [];
+    for (const file of selected) {
+      if (!isAcceptedFile(file)) {
+        notifyValidationError(`El archivo "${file.name}" no cumple con el tipo permitido (${accept}).`);
+        continue;
+      }
+
+      if (Number.isFinite(maxFileSizeBytes) && maxFileSizeBytes > 0 && file.size > maxFileSizeBytes) {
+        const maxMb = maxFileSizeBytes / (1024 * 1024);
+        notifyValidationError(`El archivo "${file.name}" supera el tamaño máximo de ${maxMb.toFixed(1)} MB.`);
+        continue;
+      }
+
+      validSelection.push(file);
+    }
+
+    if (!validSelection.length) return;
+
     const arr = await Promise.all(
-      selected.map(
+      validSelection.map(
         (file) =>
           new Promise((resolve) => {
             const reader = new FileReader();
@@ -84,7 +138,7 @@ export default function Dropzone({
 
     const persistedFiles = arr.filter(Boolean);
     onChange([...current, ...persistedFiles]);
-  }, [maxFiles, onChange, onValidationError]);
+  }, [accept, isAcceptedFile, maxFileSizeBytes, maxFiles, notifyValidationError, onChange]);
 
   const onDrop = useCallback((e) => {
     e.preventDefault();
@@ -142,7 +196,10 @@ export default function Dropzone({
       const source = getPreviewSource(fileItem);
 
       if (source?.kind === "url") {
-        const popupWindow = openPreviewWindow(source.href, initialPopupWindow, previewOptions);
+        const popupWindow = openPreviewWindow(source.href, initialPopupWindow, {
+          ...previewOptions,
+          mimeType: fileItem.mimeType || fileItem.type,
+        });
         if (!popupWindow) {
           fail(popupBlockedMessage, initialPopupWindow);
         }
@@ -151,7 +208,10 @@ export default function Dropzone({
 
       const cached = blobUrlCacheRef.current.get(fileId);
       if (cached) {
-        const popupWindow = openPreviewWindow(cached, initialPopupWindow, previewOptions);
+        const popupWindow = openPreviewWindow(cached, initialPopupWindow, {
+          ...previewOptions,
+          mimeType: fileItem.mimeType || fileItem.type,
+        });
         if (!popupWindow) {
           fail(popupBlockedMessage, initialPopupWindow);
         }
@@ -162,7 +222,10 @@ export default function Dropzone({
         const url = base64ToBlobUrl(source.base64, source.mimeType);
         if (url) {
           blobUrlCacheRef.current.set(fileId, url);
-          const popupWindow = openPreviewWindow(url, initialPopupWindow, previewOptions);
+          const popupWindow = openPreviewWindow(url, initialPopupWindow, {
+            ...previewOptions,
+            mimeType: source.mimeType,
+          });
           if (!popupWindow) {
             fail(popupBlockedMessage, initialPopupWindow);
           }
@@ -182,7 +245,10 @@ export default function Dropzone({
 
           const enrichedSource = getPreviewSource(enriched);
           if (enrichedSource?.kind === "url") {
-            if (!openPreviewWindow(enrichedSource.href, initialPopupWindow, previewOptions)) {
+            if (!openPreviewWindow(enrichedSource.href, initialPopupWindow, {
+              ...previewOptions,
+              mimeType: enriched.mimeType || enriched.type,
+            })) {
               fail(popupBlockedMessage, initialPopupWindow);
             }
             return;
@@ -193,7 +259,10 @@ export default function Dropzone({
             const url = base64ToBlobUrl(enrichedSource.base64, mime);
             if (url) {
               blobUrlCacheRef.current.set(fileId, url);
-              if (!openPreviewWindow(url, initialPopupWindow, previewOptions)) {
+              if (!openPreviewWindow(url, initialPopupWindow, {
+                ...previewOptions,
+                mimeType: mime,
+              })) {
                 fail(popupBlockedMessage, initialPopupWindow);
               }
               return;
@@ -217,6 +286,53 @@ export default function Dropzone({
   const canShowView = (f) => {
     return canPreviewFile(f, onLoadFileContent);
   };
+
+  async function handleDownload(fileItem) {
+    if (!fileItem) return;
+
+    const triggerDownload = (href, fallbackName) => {
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = fallbackName || "adjunto";
+      link.rel = "noreferrer";
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+
+    const source = getPreviewSource(fileItem);
+    if (source?.kind === "url") {
+      triggerDownload(source.href, fileItem.name);
+      return;
+    }
+
+    if (source?.kind === "base64") {
+      const downloadUrl = base64ToBlobUrl(source.base64, source.mimeType);
+      if (!downloadUrl) {
+        onPreviewError?.("No se pudo preparar la descarga del archivo.");
+        return;
+      }
+      triggerDownload(downloadUrl, fileItem.name);
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+      return;
+    }
+
+    if (typeof onLoadFileContent === "function") {
+      const loaded = await onLoadFileContent(fileItem);
+      if (!loaded) {
+        onPreviewError?.("No se pudo cargar el archivo para descargar.");
+        return;
+      }
+      const enriched = { ...fileItem, ...loaded };
+      const currentValue = valueRef.current || [];
+      onChange(currentValue.map((row) => (row.id === fileItem.id ? enriched : row)));
+      await handleDownload(enriched);
+      return;
+    }
+
+    onPreviewError?.("Este archivo no está disponible para descarga.");
+  }
 
   return (
     <div className="space-y-2">
@@ -270,6 +386,13 @@ export default function Dropzone({
                         {isLoading ? "Cargando\u2026" : "Ver"}
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      className="text-xs text-slate-700 underline"
+                      onClick={() => void handleDownload(f)}
+                    >
+                      Descargar
+                    </button>
                     <Button type="button" variant="ghost" className="h-9" disabled={disabled} onClick={() => remove(f.id)}>
                       Quitar
                     </Button>

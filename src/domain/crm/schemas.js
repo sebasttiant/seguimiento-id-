@@ -109,13 +109,39 @@ export const samplesSchema = z.object({
 ========================= */
 
 export const qualityRegSchema = z.object({
-  chamberOfCommerceFiles: z.array(z.any()).default([]),
-  rutFiles: z.array(z.any()).default([]),
-  labelProjectFiles: z.array(z.any()).default([]),
-  technicalSheetsFiles: z.array(z.any()).default([]),
+  chamberOfCommerceFiles: z.array(z.any()).max(20, "Máximo 20 adjuntos por categoría").default([]),
+  rutFiles: z.array(z.any()).max(20, "Máximo 20 adjuntos por categoría").default([]),
+  labelProjectFiles: z.array(z.any()).max(20, "Máximo 20 adjuntos por categoría").default([]),
+  technicalSheetsFiles: z.array(z.any()).max(20, "Máximo 20 adjuntos por categoría").default([]),
 
-  transportTests: z.string().optional(),
-  packagingCharacteristics: z.string().optional(),
+  transportTests: z
+    .object({
+      vibration: z.boolean().default(false),
+      temperature: z.boolean().default(false),
+      dropTest: z.boolean().default(false),
+      notes: z.string().default(""),
+    })
+    .default({
+      vibration: false,
+      temperature: false,
+      dropTest: false,
+      notes: "",
+    }),
+  packagingCharacteristics: z
+    .object({
+      material: z.string().default(""),
+      presentation: z.string().default(""),
+      closure: z.string().default(""),
+      capacity: z.string().default(""),
+      compatibilityNotes: z.string().default(""),
+    })
+    .default({
+      material: "",
+      presentation: "",
+      closure: "",
+      capacity: "",
+      compatibilityNotes: "",
+    }),
 });
 
 /* =========================

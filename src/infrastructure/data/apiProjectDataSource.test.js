@@ -247,4 +247,55 @@ describe("createApiProjectDataSource", () => {
       })
     );
   });
+
+  it("normalizes quality/reg attachments from legacy keys and keeps canonical categories", async () => {
+    projectApiMock.getById.mockResolvedValue({
+      id: "project-5",
+      name: "Proyecto Calidad",
+      description: "",
+      status: "active",
+      created_at: "2026-03-01T00:00:00Z",
+      updated_at: "2026-03-02T00:00:00Z",
+    });
+    projectApiMock.getAdvancedModules.mockResolvedValue({
+      preBrief: {},
+      clientBrief: {},
+      techSpecs: {},
+      samples: { items: [] },
+      qualityReg: {
+        docsChamber: [
+          {
+            id: "doc-1",
+            name: "camara.pdf",
+            mimeType: "application/pdf",
+            size: 123,
+            contentBase64: "aGVsbG8=",
+          },
+        ],
+        transportTests: "Apto",
+        packaging: "PET",
+      },
+      changes: { items: [] },
+    });
+    taskApiMock.listByProject.mockResolvedValue([]);
+
+    const ds = createApiProjectDataSource();
+    const project = await ds.getById("project-5");
+
+    expect(project.qualityReg.chamberOfCommerceFiles).toHaveLength(1);
+    expect(project.qualityReg.rutFiles).toEqual([]);
+    expect(project.qualityReg.transportTests).toEqual(
+      expect.objectContaining({
+        vibration: false,
+        temperature: false,
+        dropTest: false,
+        notes: "Apto",
+      }),
+    );
+    expect(project.qualityReg.packagingCharacteristics).toEqual(
+      expect.objectContaining({
+        compatibilityNotes: "PET",
+      }),
+    );
+  });
 });
