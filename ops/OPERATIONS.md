@@ -141,6 +141,20 @@ Post-restore minimo:
 
 Automatizacion sugerida (cron):
 
+Instalar o reemplazar la entrada de cron del usuario actual, usando rutas absolutas calculadas desde este checkout y sin guardar secretos:
+
+```bash
+./ops/install_backup_cron.sh --env prod --retention-days 30
+```
+
+Ver la entrada sin instalarla:
+
+```bash
+./ops/install_backup_cron.sh --env prod --retention-days 30 --dry-run
+```
+
+Ejemplo manual equivalente, ajustando la ruta del repositorio al host:
+
 ```cron
 # Diario 02:30 - backup prod con retencion de 30 dias
 30 2 * * * cd /opt/seguimiento-id && ./ops/backup_postgres.sh --env prod --retention-days 30 >> /var/log/seguimiento-id-backup.log 2>&1

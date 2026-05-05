@@ -15,7 +15,12 @@ RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
 
 COPY . /app
 
-RUN chmod +x /app/scripts/entrypoint.sh
+RUN chmod +x /app/scripts/entrypoint.sh \
+    && addgroup --system app \
+    && adduser --system --ingroup app --home /app app \
+    && chown -R app:app /app
+
+USER app
 
 EXPOSE 8000
 
