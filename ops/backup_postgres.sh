@@ -96,7 +96,11 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-COMPOSE_FILES="-f $ROOT_DIR/docker-compose.yml -f $ROOT_DIR/docker-compose.$ENVIRONMENT.yml"
+if [ "$ENVIRONMENT" = "prod" ]; then
+  COMPOSE_FILES="-f $ROOT_DIR/docker-compose.yml -f $ROOT_DIR/docker-compose.prod.yml"
+else
+  COMPOSE_FILES="-f $ROOT_DIR/docker-compose.yml -f $ROOT_DIR/docker-compose.override.yml"
+fi
 POSTGRES_DB="${POSTGRES_DB:-tasktracking}"
 POSTGRES_USER="${POSTGRES_USER:-tasktracking}"
 

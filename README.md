@@ -66,7 +66,7 @@ cd crm-desarrollo-main-webready
 ### 2) Desarrollo local (recomendado)
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml up -d --build
 ```
 
 Endpoints dev por defecto:
@@ -129,7 +129,7 @@ Notas:
 Crear usuarios demo:
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml exec backend python manage.py seed_demo_users
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml exec backend python manage.py seed_demo_users
 ```
 
 Usuarios:
@@ -181,7 +181,7 @@ docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod
 Backend test basico:
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml run --rm backend python manage.py test
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml run --rm backend python manage.py test
 ```
 
 ## Operacion

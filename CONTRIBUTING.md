@@ -22,7 +22,7 @@ Gracias por contribuir.
 npm test
 npm run build
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml config > /tmp/compose.prod.rendered.yml
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml run --rm backend python manage.py test
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml run --rm backend python manage.py test
 ```
 
 ## Estilo de commits

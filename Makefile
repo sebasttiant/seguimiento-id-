@@ -6,7 +6,7 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 
 COMPOSE_BASE := docker compose -f docker-compose.yml
-COMPOSE_DEV := $(COMPOSE_BASE) -f docker-compose.dev.yml
+COMPOSE_DEV := $(COMPOSE_BASE) -f docker-compose.override.yml
 COMPOSE_PROD := $(COMPOSE_BASE) -f docker-compose.prod.yml
 FRONTEND_DOCKER := docker run --rm -u $(HOST_UID):$(HOST_GID) -e NPM_CONFIG_CACHE=/tmp/.npm -v $(CURDIR):/workspace -w /workspace node:24.14.0-alpine
 

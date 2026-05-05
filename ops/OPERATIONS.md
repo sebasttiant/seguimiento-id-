@@ -18,25 +18,25 @@ Plantillas relevantes:
 Levantar stack dev reproducible:
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml up -d --build
 ```
 
 Parar stack dev:
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml down
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml down
 ```
 
 Reiniciar servicios dev:
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml restart
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml restart
 ```
 
 Logs dev:
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml logs -f --tail=150
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml logs -f --tail=150
 ```
 
 ## 3) Operacion prod local / pre-servidor
@@ -83,7 +83,7 @@ curl -fsS http://localhost:8073/api/health
 Seed de usuarios demo:
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml exec backend python manage.py seed_demo_users
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml exec backend python manage.py seed_demo_users
 ```
 
 Credenciales demo:
@@ -114,7 +114,7 @@ Smoke integrado (health + login + endpoint protegido):
 ## 6) Verificar compose renderizado
 
 ```bash
-docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml config > /tmp/compose.dev.rendered.yml
+docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.override.yml config > /tmp/compose.dev.rendered.yml
 docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml config > /tmp/compose.prod.rendered.yml
 ```
 
