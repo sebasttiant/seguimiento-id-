@@ -42,16 +42,28 @@ const MAX_REFERENCE_IMAGES = 5;
 
 function mergeReferenceImages(...collections) {
   const merged = [];
-  const seen = new Set();
+  const indexByKey = new Map();
 
   for (const collection of collections) {
     for (const image of collection || []) {
       if (!image || typeof image !== 'object') continue;
       const key = String(image.id || '').trim() || `${image.name || 'img'}_${image.uploadedAt || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const existingIndex = indexByKey.get(key);
+      if (existingIndex !== undefined) {
+        const existingImage = merged[existingIndex];
+        merged[existingIndex] = {
+          ...existingImage,
+          ...image,
+          ...(existingImage.contentBase64 && !image.contentBase64
+            ? { contentBase64: existingImage.contentBase64 }
+            : {}),
+        };
+        continue;
+      }
+
+      if (merged.length >= MAX_REFERENCE_IMAGES) continue;
+      indexByKey.set(key, merged.length);
       merged.push(image);
-      if (merged.length >= MAX_REFERENCE_IMAGES) return merged;
     }
   }
 

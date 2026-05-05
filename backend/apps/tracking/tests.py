@@ -645,6 +645,57 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(image_response.data["referenceImage"]["id"], "img-pre")
         self.assertEqual(image_response.data["referenceImage"]["contentBase64"], prebrief_content)
 
+    def test_clientbrief_image_endpoint_resolves_inherited_prebrief_content(self):
+        self.client.force_authenticate(self.editor)
+
+        prebrief_content = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+        advanced_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=self.project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
+        advanced_data.pre_brief = {
+            "referenceImages": [self._build_image("img-inherited", prebrief_content)],
+            "referenceImage": self._build_image("img-inherited", prebrief_content),
+        }
+        advanced_data.client_brief = {
+            "leadStatus": "CALIFICADO",
+            "referenceImages": [self._build_image("img-inherited")],
+            "referenceImage": self._build_image("img-inherited"),
+        }
+        advanced_data.save(update_fields=["pre_brief", "client_brief", "updated_at"])
+
+        image_response = self.client.get(
+            f"/api/projects/{self.project.id}/advanced-modules/image/clientbrief/?imageId=img-inherited"
+        )
+
+        self.assertEqual(image_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(image_response.data["referenceImage"]["id"], "img-inherited")
+        self.assertEqual(image_response.data["referenceImage"]["contentBase64"], prebrief_content)
+
+    def test_clientbrief_image_endpoint_keeps_404_without_fallback_content(self):
+        self.client.force_authenticate(self.editor)
+
+        advanced_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=self.project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
+        advanced_data.pre_brief = {
+            "referenceImages": [self._build_image("img-other")],
+            "referenceImage": self._build_image("img-other"),
+        }
+        advanced_data.client_brief = {
+            "leadStatus": "CALIFICADO",
+            "referenceImages": [self._build_image("img-missing-content")],
+            "referenceImage": self._build_image("img-missing-content"),
+        }
+        advanced_data.save(update_fields=["pre_brief", "client_brief", "updated_at"])
+
+        image_response = self.client.get(
+            f"/api/projects/{self.project.id}/advanced-modules/image/clientbrief/?imageId=img-missing-content"
+        )
+
+        self.assertEqual(image_response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_qualityreg_files_persist_by_category_and_survive_reload(self):
         self.client.force_authenticate(self.editor)
 

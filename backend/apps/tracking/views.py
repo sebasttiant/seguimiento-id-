@@ -312,24 +312,24 @@ class ProjectViewSet(viewsets.ModelViewSet):
         advanced_data = self._get_advanced_data(project)
         module_payload = getattr(advanced_data, field_name) or {}
         images = extract_reference_images(module_payload)
-        if not images:
+        if not images and field_name != "client_brief":
             return Response({"detail": "Reference image not found."}, status=status.HTTP_404_NOT_FOUND)
 
         image_id = (request.query_params.get("imageId") or "").strip()
         image_payload = None
         if image_id:
-            image_payload = next(
-                (
-                    image
-                    for image in images
-                    if isinstance(image, dict) and str(image.get("id") or "").strip() == image_id
-                ),
-                None,
-            )
-            if image_payload is None:
-                return Response({"detail": "Reference image not found."}, status=status.HTTP_404_NOT_FOUND)
+            image_payload = self._find_reference_image_by_id(images, image_id)
         else:
-            image_payload = images[0]
+            image_payload = images[0] if images else None
+
+        if field_name == "client_brief" and (
+            image_payload is None or not image_payload.get("contentBase64")
+        ):
+            fallback_image_id = image_id or str((image_payload or {}).get("id") or "").strip()
+            fallback_images = extract_reference_images(getattr(advanced_data, "pre_brief", {}) or {})
+            fallback_payload = self._find_reference_image_by_id(fallback_images, fallback_image_id)
+            if isinstance(fallback_payload, dict) and fallback_payload.get("contentBase64"):
+                image_payload = fallback_payload
 
         if not isinstance(image_payload, dict) or not image_payload.get("contentBase64"):
             return Response({"detail": "Reference image not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -342,6 +342,21 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     "contentBase64": image_payload["contentBase64"],
                 },
             }
+        )
+
+    @staticmethod
+    def _find_reference_image_by_id(images, image_id):
+        normalized_id = str(image_id or "").strip()
+        if not normalized_id:
+            return None
+
+        return next(
+            (
+                image
+                for image in images
+                if isinstance(image, dict) and str(image.get("id") or "").strip() == normalized_id
+            ),
+            None,
         )
 
 
