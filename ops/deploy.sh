@@ -163,6 +163,9 @@ else
   log "Skipping seed_demo_users (SEED_DEMO_USERS is not 1 in backend/.env.prod)"
 fi
 
+log "Restarting nginx to refresh upstream DNS"
+docker compose "${COMPOSE_ARGS[@]}" restart nginx
+
 NGINX_PORT_VALUE="$(read_env_value "$ENV_FILE_PATH" "NGINX_PORT")"
 NGINX_PORT="${NGINX_PORT_VALUE:-8073}"
 BASE_URL="http://localhost:${NGINX_PORT}"
