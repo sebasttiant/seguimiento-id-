@@ -223,6 +223,14 @@ export default function ProjectDetailPage() {
     return payload?.referenceImage || null;
   }
 
+  async function lookupClientByNit(nit) {
+    try {
+      return await projectApi.lookupClientByNit(nit, id);
+    } catch {
+      return { found: false };
+    }
+  }
+
   function handlePreviewError(detail) {
     setFlash({
       tone: 'bad',
@@ -390,6 +398,7 @@ export default function ProjectDetailPage() {
               canEdit={canEdit}
               onLoadReferenceImage={(fileItem) => loadReferenceImage('prebrief', fileItem)}
               onPreviewError={handlePreviewError}
+              onLookupClientByNit={lookupClientByNit}
               onSave={(v) => runSave('Contacto inicial', () => savePreBrief(v))}
             />
           </ReadOnlyBlock>
@@ -402,6 +411,7 @@ export default function ProjectDetailPage() {
               canEdit={canEdit}
               onLoadReferenceImage={(fileItem) => loadReferenceImage('clientbrief', fileItem)}
               onPreviewError={handlePreviewError}
+              onLookupClientByNit={lookupClientByNit}
               onSave={(v) => runSave('Cliente', () => updateClient.mutateAsync(v))}
             />
           </ReadOnlyBlock>

@@ -54,6 +54,13 @@ export const projectApi = {
     return data;
   },
 
+  async lookupClientByNit(nit, excludeProjectId) {
+    const params = { nit };
+    if (excludeProjectId) params.exclude_project = excludeProjectId;
+    const { data } = await httpClient.get("/projects/client-lookup/", { params });
+    return data;
+  },
+
   async deleteProject(id) {
     await httpClient.delete(`/projects/${encodeURIComponent(id)}/`);
   },

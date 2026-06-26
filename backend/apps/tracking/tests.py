@@ -188,6 +188,97 @@ class TrackingAdvancedModulesTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("preBrief", response.data)
 
+    def test_client_lookup_by_nit_returns_latest_reusable_customer_fields_only(self):
+        self.client.force_authenticate(self.editor)
+        older_project = Project.objects.create(name="Older Client", created_by=self.admin)
+        newer_project = Project.objects.create(name="Newer Client", created_by=self.admin)
+
+        older_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=older_project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
+        older_data.client_brief = {
+            **older_data.client_brief,
+            "nit": "900-123",
+            "clientName": "Older Labs",
+            "brand": "Old Brand",
+            "productName": "Old Product",
+        }
+        older_data.save(update_fields=["client_brief", "updated_at"])
+
+        newer_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=newer_project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
+        newer_data.client_brief = {
+            **newer_data.client_brief,
+            "nit": "900123",
+            "clientName": "New Labs",
+            "brand": "New Brand",
+            "contactName": "Maria Cliente",
+            "contactEmail": "maria@example.com",
+            "contactPhone": "3001234567",
+            "category": "COSMETICOS",
+            "productName": "Specific Product",
+            "referenceImages": [{"id": "img-1", "name": "ref.png"}],
+            "leadStatus": "CALIFICADO",
+        }
+        newer_data.save(update_fields=["client_brief", "updated_at"])
+
+        response = self.client.get("/api/projects/client-lookup/", {"nit": "900.123"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["found"])
+        self.assertEqual(response.data["clientName"], "New Labs")
+        self.assertEqual(response.data["brand"], "New Brand")
+        self.assertEqual(response.data["contactName"], "Maria Cliente")
+        self.assertNotIn("productName", response.data)
+        self.assertNotIn("referenceImages", response.data)
+        self.assertNotIn("leadStatus", response.data)
+
+    def test_client_lookup_by_nit_can_read_prebrief_and_exclude_current_project(self):
+        self.client.force_authenticate(self.editor)
+        current_project = Project.objects.create(name="Current", created_by=self.admin)
+        source_project = Project.objects.create(name="Source", created_by=self.admin)
+
+        current_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=current_project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
+        current_data.client_brief = {
+            **current_data.client_brief,
+            "nit": "800456",
+            "clientName": "Current Draft",
+        }
+        current_data.save(update_fields=["client_brief", "updated_at"])
+
+        source_data, _ = ProjectAdvancedData.objects.get_or_create(
+            project=source_project,
+            defaults=ProjectAdvancedData.default_payload(),
+        )
+        source_data.pre_brief = {
+            **source_data.pre_brief,
+            "nit": "800-456",
+            "clientName": "Source Lead",
+            "brand": "Source Brand",
+        }
+        source_data.save(update_fields=["pre_brief", "updated_at"])
+
+        response = self.client.get(
+            "/api/projects/client-lookup/",
+            {"nit": "800456", "exclude_project": str(current_project.id)},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["found"])
+        self.assertEqual(response.data["clientName"], "Source Lead")
+        self.assertEqual(response.data["brand"], "Source Brand")
+
+    def test_client_lookup_by_nit_requires_authentication(self):
+        response = self.client.get("/api/projects/client-lookup/", {"nit": "900123"})
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_clientbrief_reference_image_is_persisted_in_database(self):
         self.client.force_authenticate(self.editor)
         payload = {

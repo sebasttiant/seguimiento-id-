@@ -346,6 +346,17 @@ class ClientBriefSerializer(serializers.Serializer):
         return with_reference_images(attrs, images)
 
 
+class ClientLookupSerializer(serializers.Serializer):
+    found = serializers.BooleanField()
+    clientName = serializers.CharField(required=False, allow_blank=True)
+    nit = serializers.CharField(required=False, allow_blank=True)
+    brand = serializers.CharField(required=False, allow_blank=True)
+    contactName = serializers.CharField(required=False, allow_blank=True)
+    contactEmail = serializers.CharField(required=False, allow_blank=True)
+    contactPhone = serializers.CharField(required=False, allow_blank=True)
+    category = serializers.CharField(required=False, allow_blank=True)
+
+
 class TechSpecsSerializer(serializers.Serializer):
     phMin = serializers.FloatField(required=False, allow_null=True, default=None)
     phMax = serializers.FloatField(required=False, allow_null=True, default=None)

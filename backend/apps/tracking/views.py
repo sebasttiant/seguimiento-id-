@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +11,7 @@ from .serializers import (
     AdvancedModulesSerializer,
     ChangesSerializer,
     ClientBriefSerializer,
+    ClientLookupSerializer,
     MAX_REFERENCE_IMAGES_COUNT,
     PreBriefSerializer,
     ProjectSerializer,
@@ -22,6 +25,17 @@ from .serializers import (
     with_reference_images,
     without_reference_image_content,
 )
+
+
+CLIENT_LOOKUP_FIELDS = [
+    "clientName",
+    "nit",
+    "brand",
+    "contactName",
+    "contactEmail",
+    "contactPhone",
+    "category",
+]
 
 
 ADVANCED_MODULE_CONFIG = {
@@ -51,6 +65,46 @@ class ProjectViewSet(viewsets.ModelViewSet):
             defaults=ProjectAdvancedData.default_payload(),
         )
         return advanced_data
+
+    @staticmethod
+    def _normalize_nit(value):
+        return re.sub(r"[^0-9A-Za-z]", "", str(value or "")).lower()
+
+    @classmethod
+    def _module_matches_nit(cls, module_payload, normalized_nit):
+        if not isinstance(module_payload, dict):
+            return False
+        return cls._normalize_nit(module_payload.get("nit")) == normalized_nit
+
+    @classmethod
+    def _build_client_lookup_payload(cls, advanced_data, normalized_nit):
+        for module_payload in [advanced_data.client_brief or {}, advanced_data.pre_brief or {}]:
+            if not cls._module_matches_nit(module_payload, normalized_nit):
+                continue
+            return {
+                "found": True,
+                **{field: module_payload.get(field, "") for field in CLIENT_LOOKUP_FIELDS},
+            }
+        return None
+
+    @action(detail=False, methods=["get"], url_path="client-lookup")
+    def client_lookup(self, request):
+        normalized_nit = self._normalize_nit(request.query_params.get("nit"))
+        if not normalized_nit:
+            return Response({"found": False})
+
+        exclude_project_id = str(request.query_params.get("exclude_project") or "").strip()
+        queryset = ProjectAdvancedData.objects.select_related("project").order_by("-updated_at", "-project__created_at")
+        if exclude_project_id:
+            queryset = queryset.exclude(project_id=exclude_project_id)
+
+        for advanced_data in queryset:
+            payload = self._build_client_lookup_payload(advanced_data, normalized_nit)
+            if payload is not None:
+                serializer = ClientLookupSerializer(payload)
+                return Response(serializer.data)
+
+        return Response({"found": False})
 
     @staticmethod
     def _normalize_incoming_module_reference_images(module_data, existing_module, append_mode=False):

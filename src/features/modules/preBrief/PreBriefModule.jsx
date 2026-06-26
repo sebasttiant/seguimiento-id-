@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Dropzone from '../../../shared/ui/Dropzone.jsx';
 import { Badge, Button, Card, CardContent, CardHeader, Input, Label } from '../../../shared/ui/primitives.jsx';
 
@@ -9,6 +9,8 @@ const CATEGORY_OPTIONS = [
 ];
 
 const MAX_REFERENCE_IMAGES = 5;
+const AUTOFILL_FIELDS = ['clientName', 'brand', 'contactName', 'contactEmail', 'contactPhone', 'category'];
+const AUTOFILL_DEBOUNCE_MS = 450;
 
 function getReferenceImages(moduleData = {}) {
   if (Array.isArray(moduleData.referenceImages)) return moduleData.referenceImages;
@@ -28,9 +30,12 @@ function leadMeta(status) {
   }
 }
 
-export default function PreBriefModule({ project, canEdit, onSave, onLoadReferenceImage, onPreviewError }) {
+export default function PreBriefModule({ project, canEdit, onSave, onLoadReferenceImage, onPreviewError, onLookupClientByNit }) {
   const disabled = !canEdit;
   const fieldId = useId();
+  const touchedFieldsRef = useRef(new Set());
+  const lookupSeqRef = useRef(0);
+  const lookupClientByNitRef = useRef(onLookupClientByNit);
 
   const initial = useMemo(() => {
     const preBrief = project?.preBrief || {};
@@ -59,11 +64,45 @@ export default function PreBriefModule({ project, canEdit, onSave, onLoadReferen
   useEffect(() => {
     setForm(initial);
     setDirty(false);
+    touchedFieldsRef.current = new Set();
   }, [initial]);
+
+  useEffect(() => {
+    lookupClientByNitRef.current = onLookupClientByNit;
+  }, [onLookupClientByNit]);
+
+  useEffect(() => {
+    const nit = String(form.nit || '').trim();
+    if (disabled || !nit || typeof lookupClientByNitRef.current !== 'function') return undefined;
+
+    const lookupSeq = lookupSeqRef.current + 1;
+    lookupSeqRef.current = lookupSeq;
+
+    const timeoutId = window.setTimeout(async () => {
+      const result = await lookupClientByNitRef.current(nit);
+      if (lookupSeqRef.current !== lookupSeq || !result?.found) return;
+
+      setForm((current) => {
+        const next = { ...current };
+        for (const field of AUTOFILL_FIELDS) {
+          const value = result[field];
+          if (value === null || value === undefined || String(value).trim() === '') continue;
+          if (touchedFieldsRef.current.has(field)) continue;
+          if (String(current[field] || '').trim() && current[field] !== initial[field]) continue;
+          next[field] = value;
+        }
+        return next;
+      });
+      setDirty(true);
+    }, AUTOFILL_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [disabled, form.nit, initial]);
 
   const meta = leadMeta(form.leadStatus);
 
   function setField(name, value) {
+    touchedFieldsRef.current.add(name);
     setForm((p) => ({ ...p, [name]: value }));
     setDirty(true);
   }
