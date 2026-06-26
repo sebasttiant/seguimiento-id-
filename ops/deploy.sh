@@ -35,6 +35,7 @@ Environment overrides:
   APP_DIR              Application checkout directory (default: parent of ops/)
   DEPLOY_REMOTE        Git remote name (default: origin)
   DEPLOY_BRANCH        Git branch to deploy (same as --branch)
+  AUTO_ROTATE_DEFAULT_DB_PASSWORD=0 disables automatic replacement of unsafe default POSTGRES_PASSWORD
   HEALTH_TIMEOUT_SECONDS, SERVICE_TIMEOUT_SECONDS
 EOF
 }
@@ -160,6 +161,98 @@ validate_env_value() {
   fi
 }
 
+generate_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+
+  python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+}
+
+ensure_env_file_writable() {
+  local file_path="$1"
+  local dir_path
+  local probe_path
+
+  [[ -f "$file_path" ]] || die "Required env file not found: ${file_path}"
+  [[ -w "$file_path" ]] || die "Env file is not writable: ${file_path}"
+
+  dir_path="$(dirname "$file_path")"
+  probe_path="${dir_path}/.deploy-write-test.$$"
+  : >"$probe_path" || die "Env directory is not writable: ${dir_path}"
+  rm -f "$probe_path"
+}
+
+set_env_value() {
+  local file_path="$1"
+  local key="$2"
+  local value="$3"
+
+  python3 - "$file_path" "$key" "$value" <<'PY'
+from pathlib import Path
+import os
+import shutil
+import sys
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+value = sys.argv[3]
+tmp_path = path.with_name(f".{path.name}.tmp")
+current_stat = path.stat()
+
+lines = path.read_text().splitlines()
+updated = []
+found = False
+
+for line in lines:
+    stripped = line.strip()
+    prefix = "export " if stripped.startswith("export ") else ""
+    candidate = stripped[len(prefix):] if prefix else stripped
+
+    if candidate.startswith(f"{key}="):
+        updated.append(f"{prefix}{key}={value}")
+        found = True
+    else:
+        updated.append(line)
+
+if not found:
+    updated.append(f"{key}={value}")
+
+tmp_path.write_text("\n".join(updated) + "\n")
+shutil.copystat(path, tmp_path)
+os.chown(tmp_path, current_stat.st_uid, current_stat.st_gid)
+tmp_path.replace(path)
+PY
+}
+
+verify_postgres_password() {
+  local postgres_user="$1"
+  local postgres_db="$2"
+  local postgres_password="$3"
+
+  compose exec -T postgres sh -s -- "$postgres_user" "$postgres_db" "$postgres_password" <<'SH'
+set -eu
+postgres_user="$1"
+postgres_db="$2"
+postgres_password="$3"
+PGPASSWORD="$postgres_password" psql -h 127.0.0.1 -U "$postgres_user" -d "$postgres_db" -c 'select 1;' >/dev/null
+SH
+}
+
+backup_env_before_rotation() {
+  local file_path="$1"
+  local stamp="$2"
+  local backup_path="${file_path}.bak-before-password-rotation-${stamp}"
+
+  cp "$file_path" "$backup_path"
+  chmod --reference="$file_path" "$backup_path" 2>/dev/null || true
+  log "Env backup created before password rotation: ${backup_path}"
+}
+
 validate_production_env_files() {
   local compose_env_file="$1"
   local backend_env_file="$2"
@@ -170,6 +263,76 @@ validate_production_env_files() {
   validate_env_value "$backend_env_file" "ALLOWED_HOSTS"
   validate_env_value "$backend_env_file" "CORS_ALLOWED_ORIGINS"
   validate_env_value "$backend_env_file" "CSRF_TRUSTED_ORIGINS"
+}
+
+auto_rotate_default_postgres_password() {
+  local compose_env_file="$1"
+  local backend_env_file="$2"
+  local auto_rotate_enabled="${AUTO_ROTATE_DEFAULT_DB_PASSWORD:-1}"
+  local compose_password
+  local backend_password
+  local postgres_user
+  local postgres_db
+  local new_password
+  local stamp
+
+  compose_password="$(read_env_value "$compose_env_file" "POSTGRES_PASSWORD")"
+  backend_password="$(read_env_value "$backend_env_file" "POSTGRES_PASSWORD")"
+
+  if ! is_placeholder_value "POSTGRES_PASSWORD" "$compose_password" && ! is_placeholder_value "POSTGRES_PASSWORD" "$backend_password"; then
+    [[ "$compose_password" == "$backend_password" ]] || die "POSTGRES_PASSWORD differs between ${compose_env_file} and ${backend_env_file}. Refusing deploy until they match."
+    return
+  fi
+
+  [[ "$auto_rotate_enabled" != "0" && "$auto_rotate_enabled" != "false" ]] || die "Unsafe default POSTGRES_PASSWORD detected and AUTO_ROTATE_DEFAULT_DB_PASSWORD is disabled. Replace it manually before deploy."
+  command -v python3 >/dev/null 2>&1 || die "python3 is required to safely update env files during password rotation"
+  ensure_env_file_writable "$compose_env_file"
+  ensure_env_file_writable "$backend_env_file"
+
+  postgres_user="$(read_env_value "$compose_env_file" "POSTGRES_USER")"
+  postgres_db="$(read_env_value "$compose_env_file" "POSTGRES_DB")"
+  postgres_user="${postgres_user:-tasktracking}"
+  postgres_db="${postgres_db:-tasktracking}"
+  new_password="$(generate_secret)"
+  stamp="$(date +%Y%m%d_%H%M%S)"
+
+  log "Unsafe default POSTGRES_PASSWORD detected. Rotating it automatically before deploy."
+  log "Starting postgres with the current env so the database role can be updated safely"
+  compose up -d postgres
+  wait_for_service postgres "$SERVICE_TIMEOUT_SECONDS"
+
+  log "Updating PostgreSQL role password inside the running database"
+  if ! compose exec -T postgres sh -s -- "$postgres_user" "$postgres_db" "$new_password" <<'SH'
+set -eu
+postgres_user="$1"
+postgres_db="$2"
+new_password="$3"
+psql -U "$postgres_user" -d "$postgres_db" -v new_password="$new_password" -c "ALTER USER \"$postgres_user\" WITH PASSWORD :'new_password';"
+SH
+  then
+    die "Could not rotate PostgreSQL password automatically. Existing database password was not changed."
+  fi
+
+  backup_env_before_rotation "$compose_env_file" "$stamp"
+  backup_env_before_rotation "$backend_env_file" "$stamp"
+
+  log "Updating POSTGRES_PASSWORD in env files without printing the secret"
+  set_env_value "$compose_env_file" "POSTGRES_PASSWORD" "$new_password"
+  set_env_value "$backend_env_file" "POSTGRES_PASSWORD" "$new_password"
+
+  log "Verifying PostgreSQL accepts the rotated password"
+  if ! verify_postgres_password "$postgres_user" "$postgres_db" "$new_password"; then
+    die "PostgreSQL did not accept the rotated password. Review env backups before continuing."
+  fi
+
+  log "Restarting postgres so future compose commands use the rotated password"
+  compose up -d --force-recreate postgres
+  wait_for_service postgres "$SERVICE_TIMEOUT_SECONDS"
+
+  log "Verifying recreated PostgreSQL container accepts the rotated password"
+  if ! verify_postgres_password "$postgres_user" "$postgres_db" "$new_password"; then
+    die "Recreated PostgreSQL container did not accept the rotated password. Review env backups before continuing."
+  fi
 }
 
 ensure_clean_worktree() {
@@ -435,10 +598,12 @@ fi
 
 require_production_env_file "$ENV_FILE_PATH" "Compose env file"
 require_production_env_file "$BACKEND_ENV_FILE_PATH" "backend env file from BACKEND_ENV_FILE_PROD"
-validate_production_env_files "$ENV_FILE_PATH" "$BACKEND_ENV_FILE_PATH"
 
 COMPOSE_ARGS=(--env-file "$ENV_FILE_PATH" -f docker-compose.yml -f docker-compose.prod.yml)
 trap print_failure_logs EXIT
+
+auto_rotate_default_postgres_password "$ENV_FILE_PATH" "$BACKEND_ENV_FILE_PATH"
+validate_production_env_files "$ENV_FILE_PATH" "$BACKEND_ENV_FILE_PATH"
 
 log "Validating Docker Compose production configuration"
 compose config --quiet
