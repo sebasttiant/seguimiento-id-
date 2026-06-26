@@ -36,6 +36,7 @@ Environment overrides:
   DEPLOY_REMOTE        Git remote name (default: origin)
   DEPLOY_BRANCH        Git branch to deploy (same as --branch)
   AUTO_ROTATE_DEFAULT_DB_PASSWORD=0 disables automatic replacement of unsafe default POSTGRES_PASSWORD
+  AUTO_ROTATE_DEFAULT_SECRET_KEY=0 disables automatic replacement of unsafe default Django SECRET_KEY
   HEALTH_TIMEOUT_SECONDS, SERVICE_TIMEOUT_SECONDS
 EOF
 }
@@ -192,7 +193,7 @@ set_env_value() {
   local key="$2"
   local value="$3"
 
-  python3 - "$file_path" "$key" "$value" <<'PY'
+  DEPLOY_ENV_VALUE="$value" python3 - "$file_path" "$key" <<'PY'
 from pathlib import Path
 import os
 import shutil
@@ -200,7 +201,7 @@ import sys
 
 path = Path(sys.argv[1])
 key = sys.argv[2]
-value = sys.argv[3]
+value = os.environ["DEPLOY_ENV_VALUE"]
 tmp_path = path.with_name(f".{path.name}.tmp")
 current_stat = path.stat()
 
@@ -234,12 +235,12 @@ verify_postgres_password() {
   local postgres_db="$2"
   local postgres_password="$3"
 
-  compose exec -T postgres sh -s -- "$postgres_user" "$postgres_db" "$postgres_password" <<'SH'
+  compose exec -T postgres sh -s -- "$postgres_user" "$postgres_db" <<SH
 set -eu
-postgres_user="$1"
-postgres_db="$2"
-postgres_password="$3"
-PGPASSWORD="$postgres_password" psql -h 127.0.0.1 -U "$postgres_user" -d "$postgres_db" -c 'select 1;' >/dev/null
+postgres_user="\$1"
+postgres_db="\$2"
+postgres_password="$postgres_password"
+PGPASSWORD="\$postgres_password" psql -h 127.0.0.1 -U "\$postgres_user" -d "\$postgres_db" -c 'select 1;' >/dev/null
 SH
 }
 
@@ -302,12 +303,13 @@ auto_rotate_default_postgres_password() {
   wait_for_service postgres "$SERVICE_TIMEOUT_SECONDS"
 
   log "Updating PostgreSQL role password inside the running database"
-  if ! compose exec -T postgres sh -s -- "$postgres_user" "$postgres_db" "$new_password" <<'SH'
+  if ! compose exec -T postgres sh -s -- "$postgres_user" "$postgres_db" <<SH
 set -eu
-postgres_user="$1"
-postgres_db="$2"
-new_password="$3"
-psql -U "$postgres_user" -d "$postgres_db" -c "ALTER USER \"$postgres_user\" WITH PASSWORD '$new_password';"
+postgres_user="\$1"
+postgres_db="\$2"
+psql -U "\$postgres_user" -d "\$postgres_db" -v target_user="\$postgres_user" <<'SQL'
+SELECT format('ALTER USER %I WITH PASSWORD %L', :'target_user', '$new_password') \gexec
+SQL
 SH
   then
     die "Could not rotate PostgreSQL password automatically. Existing database password was not changed."
@@ -333,6 +335,33 @@ SH
   if ! verify_postgres_password "$postgres_user" "$postgres_db" "$new_password"; then
     die "Recreated PostgreSQL container did not accept the rotated password. Review env backups before continuing."
   fi
+}
+
+auto_rotate_default_secret_key() {
+  local backend_env_file="$1"
+  local auto_rotate_enabled="${AUTO_ROTATE_DEFAULT_SECRET_KEY:-1}"
+  local current_secret
+  local new_secret
+  local stamp
+
+  current_secret="$(read_env_value "$backend_env_file" "SECRET_KEY")"
+
+  if ! is_placeholder_value "SECRET_KEY" "$current_secret"; then
+    return
+  fi
+
+  [[ "$auto_rotate_enabled" != "0" && "$auto_rotate_enabled" != "false" ]] || die "Unsafe default SECRET_KEY detected and AUTO_ROTATE_DEFAULT_SECRET_KEY is disabled. Replace it manually before deploy."
+  command -v python3 >/dev/null 2>&1 || die "python3 is required to safely update env files during SECRET_KEY rotation"
+  ensure_env_file_writable "$backend_env_file"
+
+  new_secret="$(generate_secret)"
+  stamp="$(date +%Y%m%d_%H%M%S)"
+
+  log "Unsafe default SECRET_KEY detected. Generating a secure Django SECRET_KEY automatically."
+  warn "Rotating SECRET_KEY can invalidate active sessions and signed tokens. This is expected when replacing an unsafe production placeholder."
+
+  backup_env_before_rotation "$backend_env_file" "$stamp"
+  set_env_value "$backend_env_file" "SECRET_KEY" "$new_secret"
 }
 
 ensure_clean_worktree() {
@@ -603,6 +632,7 @@ COMPOSE_ARGS=(--env-file "$ENV_FILE_PATH" -f docker-compose.yml -f docker-compos
 trap print_failure_logs EXIT
 
 auto_rotate_default_postgres_password "$ENV_FILE_PATH" "$BACKEND_ENV_FILE_PATH"
+auto_rotate_default_secret_key "$BACKEND_ENV_FILE_PATH"
 validate_production_env_files "$ENV_FILE_PATH" "$BACKEND_ENV_FILE_PATH"
 
 log "Validating Docker Compose production configuration"
