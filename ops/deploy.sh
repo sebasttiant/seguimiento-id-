@@ -307,7 +307,7 @@ set -eu
 postgres_user="$1"
 postgres_db="$2"
 new_password="$3"
-psql -U "$postgres_user" -d "$postgres_db" -v new_password="$new_password" -c "ALTER USER \"$postgres_user\" WITH PASSWORD :'new_password';"
+psql -U "$postgres_user" -d "$postgres_db" -c "ALTER USER \"$postgres_user\" WITH PASSWORD '$new_password';"
 SH
   then
     die "Could not rotate PostgreSQL password automatically. Existing database password was not changed."
